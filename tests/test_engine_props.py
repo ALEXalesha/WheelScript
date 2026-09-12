@@ -5,8 +5,8 @@ import math
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from wheelscript.engine import (MAX_DT, TAP_SECONDS, DeviceState, Engine, binding_value, read_source,
-                                release_level, shape)
+from wheelscript.engine import (MAX_DT, NEUTRAL_PAD, TAP_SECONDS, DeviceState, Engine, binding_value,
+                                read_source, release_level, shape)
 from wheelscript.model import MOUSE_BUTTONS, PRESS_MODES, Action, Binding, InputSource, Profile
 
 from .strategies import (DEV, N_AXES, N_BUTTONS, FakeOS, actions_no_toggle, bindings, digital_sources, dts,
@@ -20,6 +20,8 @@ def run(engine, os_, seq):
         os_.apply(engine.step(s, dt, DEV))
         assert os_.keys == engine.held_keys()
         assert os_.buttons == engine.held_buttons()
+        assert os_.pad.buttons == engine.held_pads()
+        assert os_.pad == engine.pad_state
 
 
 @given(profiles(), steps, st.booleans())
@@ -28,8 +30,8 @@ def test_events_balanced_and_mirror_engine_state(profile, seq, enabled):
     e, os_ = Engine(profile, enabled=enabled), FakeOS()
     run(e, os_, seq)
     os_.apply(e.release_all())
-    assert os_.keys == set() and os_.buttons == set()
-    assert e.held_keys() == frozenset() and e.held_buttons() == frozenset()
+    assert os_.keys == set() and os_.buttons == set() and os_.pad == NEUTRAL_PAD
+    assert e.held_keys() == frozenset() and e.held_buttons() == frozenset() and e.held_pads() == frozenset()
 
 
 @given(profiles(), steps)
@@ -39,6 +41,7 @@ def test_disable_releases_everything(profile, seq):
     os_.apply(e.set_enabled(False))
     assert not e.enabled
     assert os_.keys == set() and os_.buttons == set()
+    assert os_.pad == NEUTRAL_PAD, "выключение возвращает геймпад в нейтраль"
 
 
 @given(profiles(bindings(action=actions_no_toggle)), steps)
@@ -55,7 +58,7 @@ def test_not_enabled_implies_nothing_held(profile, seq):
     for s, dt in seq:
         os_.apply(e.step(s, dt, DEV))
         if not e.enabled:
-            assert os_.keys == set() and os_.buttons == set()
+            assert os_.keys == set() and os_.buttons == set() and os_.pad == NEUTRAL_PAD
 
 
 @given(profiles(bindings(action=actions_no_toggle)), steps)
@@ -65,14 +68,19 @@ def test_device_gone_releases_all_but_latched(profile, seq):
     run(e, os_, seq)
     for _ in range(int(TAP_SECONDS / 0.01) + 2):
         os_.apply(e.step({}, 0.01, DEV))
-    allowed_keys, allowed_buttons = set(), set()
+    allowed_keys, allowed_buttons, allowed_pads = set(), set(), set()
     for b in profile.bindings:
         if b.action.press == "toggle":
             allowed_keys |= set(b.action.keys)
             if b.action.kind == "mouse_button":
                 allowed_buttons.add(b.action.button)
+            if b.action.kind == "pad_button":
+                allowed_pads.add(b.action.pad)
     assert os_.keys <= allowed_keys
     assert os_.buttons <= allowed_buttons
+    assert os_.pad.buttons <= allowed_pads
+    assert (os_.pad.lx, os_.pad.ly, os_.pad.rx, os_.pad.ry, os_.pad.lt, os_.pad.rt) == (0,) * 6, \
+        "без руля стики и курки в нейтрали"
 
 
 @given(profiles(bindings(action=actions_no_toggle)),
@@ -306,6 +314,63 @@ def test_default_device_variants(profile, seq, default):
         os_.apply(e.step(s, dt, default))
     os_.apply(e.release_all())
     assert os_.keys == set()
+
+
+@given(good_axis, st.floats(0, 0.9), st.floats(0.2, 5), st.sampled_from(["left", "right", "up", "down"]),
+       st.sampled_from(["left", "right"]))
+def test_pad_stick_follows_wheel_exactly(v, dz, curve, direction, stick):
+    """Стик повторяет руль: значение = shape(|v|) со знаком, в нужной оси, в нужную сторону (XInput: +Y вверх)."""
+    b = Binding.make("s", InputSource.axis(0, "full", DEV), Action.stick(stick, direction), deadzone=dz, curve=curve)
+    e, os_ = Engine(Profile("p", (b,)), True), FakeOS()
+    os_.apply(e.step({DEV: DeviceState((v,))}, 0.01, DEV))
+    m = shape(abs(v), dz, curve) * (1 if v >= 0 else -1)
+    vx, vy = {"left": (-1, 0), "right": (1, 0), "up": (0, 1), "down": (0, -1)}[direction]
+    x, y = (os_.pad.lx, os_.pad.ly) if stick == "left" else (os_.pad.rx, os_.pad.ry)
+    other = (os_.pad.rx, os_.pad.ry) if stick == "left" else (os_.pad.lx, os_.pad.ly)
+    assert math.isclose(x, vx * m, abs_tol=1e-12) and math.isclose(y, vy * m, abs_tol=1e-12)
+    assert other == (0.0, 0.0)
+
+
+@given(st.lists(st.tuples(good_axis, st.sampled_from(["left", "right", "up", "down"])), min_size=1, max_size=6))
+def test_pad_stick_sum_is_clamped(parts):
+    """Несколько привязок на один стик складываются, но никогда не выходят за [-1, 1]."""
+    bs = tuple(Binding.make(f"s{i}", InputSource.axis(i % 4, "full", DEV), Action.stick("left", d), deadzone=0.0)
+               for i, (_, d) in enumerate(parts))
+    axes = [0.0] * 4
+    for i, (v, _) in enumerate(parts):
+        axes[i % 4] = v
+    e, os_ = Engine(Profile("p", bs), True), FakeOS()
+    os_.apply(e.step({DEV: DeviceState(tuple(axes))}, 0.01, DEV))
+    assert -1.0 <= os_.pad.lx <= 1.0 and -1.0 <= os_.pad.ly <= 1.0
+
+
+@given(st.lists(st.tuples(st.floats(-1, 1), st.sampled_from(["lt", "rt"])), min_size=1, max_size=4))
+def test_pad_trigger_is_max_of_bindings(parts):
+    bs = tuple(Binding.make(f"t{i}", InputSource.axis(i, "pedal", DEV), Action.trigger(w), deadzone=0.0)
+               for i, (_, w) in enumerate(parts))
+    axes = tuple(v for v, _ in parts)
+    e, os_ = Engine(Profile("p", bs), True), FakeOS()
+    os_.apply(e.step({DEV: DeviceState(axes)}, 0.01, DEV))
+    for which in ("lt", "rt"):
+        vals = [(v + 1) / 2 for v, w in parts if w == which]
+        want = max(vals) if vals else 0.0
+        got = os_.pad.lt if which == "lt" else os_.pad.rt
+        assert math.isclose(got, want, abs_tol=1e-12)
+
+
+@given(st.lists(st.tuples(st.booleans(), st.booleans()), max_size=40))
+def test_pad_button_refcount(presses):
+    """Кнопка A геймпада зажата, пока зажата хотя бы одна из двух кнопок руля; события только при изменении."""
+    p = Profile("p", (Binding.make("a", InputSource.button(0, DEV), Action.pad_button("a")),
+                      Binding.make("b", InputSource.button(1, DEV), Action.pad_button("a"))))
+    e, os_ = Engine(p, True), FakeOS()
+    changes, prev = 0, False
+    for b0, b1 in presses:
+        os_.apply(e.step({DEV: DeviceState((), (b0, b1), ())}, 0.01, DEV))
+        assert ("a" in os_.pad.buttons) == (b0 or b1)
+        changes += (b0 or b1) != prev
+        prev = b0 or b1
+    assert os_.pad_events == changes
 
 
 @given(st.floats(0.01, 0.99))

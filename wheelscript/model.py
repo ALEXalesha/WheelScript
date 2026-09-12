@@ -17,10 +17,17 @@ from . import keys as keymod
 SOURCE_KINDS = ("none", "axis", "button", "hat")
 AXIS_MODES = ("full", "pos", "neg", "pedal", "pedal_inv")
 HAT_DIRS = ("up", "down", "left", "right")
-ACTION_KINDS = ("none", "key", "mouse_button", "mouse_move", "mouse_wheel", "toggle")
-ANALOG_ACTIONS = frozenset({"mouse_move", "mouse_wheel"})
-PRESS_ACTIONS = frozenset({"key", "mouse_button"})
+ACTION_KINDS = ("none", "key", "mouse_button", "mouse_move", "mouse_wheel",
+                "pad_button", "pad_stick", "pad_trigger", "toggle")
+MOTION_ACTIONS = frozenset({"mouse_move", "mouse_wheel"})
+PAD_ACTIONS = frozenset({"pad_button", "pad_stick", "pad_trigger"})
+ANALOG_ACTIONS = MOTION_ACTIONS | {"pad_stick", "pad_trigger"}
+PRESS_ACTIONS = frozenset({"key", "mouse_button", "pad_button"})
 MOUSE_BUTTONS = ("left", "right", "middle", "x1", "x2")
+PAD_BUTTONS = ("a", "b", "x", "y", "lb", "rb", "back", "start", "ls", "rs", "guide",
+               "dup", "ddown", "dleft", "dright")
+PAD_STICKS = ("left", "right")
+PAD_TRIGGERS = ("lt", "rt")
 DIRECTIONS = ("left", "right", "up", "down")
 PRESS_MODES = ("hold", "tap", "toggle")
 
@@ -135,6 +142,7 @@ class Action:
     direction: str = "right"
     speed: float = DEFAULT_MOVE_SPEED
     press: str = "hold"
+    pad: str = ""  # кнопка / стик / курок геймпада, для остальных действий пусто
 
     @staticmethod
     def key(keys: tuple[str, ...] | list[str], press: str = "hold") -> "Action":
@@ -157,6 +165,18 @@ class Action:
         return Action(kind="toggle")
 
     @staticmethod
+    def pad_button(button: str, press: str = "hold") -> "Action":
+        return Action.from_dict({"kind": "pad_button", "pad": button, "press": press})
+
+    @staticmethod
+    def stick(stick: str, direction: str) -> "Action":
+        return Action.from_dict({"kind": "pad_stick", "pad": stick, "direction": direction})
+
+    @staticmethod
+    def trigger(which: str) -> "Action":
+        return Action.from_dict({"kind": "pad_trigger", "pad": which})
+
+    @staticmethod
     def from_dict(d: Any) -> "Action":
         if not isinstance(d, dict):
             return Action()
@@ -174,11 +194,19 @@ class Action:
         if kind == "mouse_wheel":
             return Action(kind, direction=_choice(d.get("direction"), DIRECTIONS, "up"),
                           speed=_num(d.get("speed"), DEFAULT_WHEEL_SPEED, *WHEEL_SPEED))
+        if kind == "pad_button":
+            return Action(kind, pad=_choice(d.get("pad"), PAD_BUTTONS, "a"),
+                          press=_choice(d.get("press"), PRESS_MODES, "hold"))
+        if kind == "pad_stick":
+            return Action(kind, pad=_choice(d.get("pad"), PAD_STICKS, "left"),
+                          direction=_choice(d.get("direction"), DIRECTIONS, "right"))
+        if kind == "pad_trigger":
+            return Action(kind, pad=_choice(d.get("pad"), PAD_TRIGGERS, "rt"))
         return Action(kind)
 
     def to_dict(self) -> dict:
         return {"kind": self.kind, "keys": list(self.keys), "button": self.button,
-                "direction": self.direction, "speed": self.speed, "press": self.press}
+                "direction": self.direction, "speed": self.speed, "press": self.press, "pad": self.pad}
 
     @property
     def is_analog(self) -> bool:
@@ -327,6 +355,22 @@ def default_profile() -> Profile:
         B("Камера вниз (крестовина ↓)", S.hat(0, "down"), A.move("down", 1500)),
         B("A → ЛКМ", S.button(0), A.mouse("left")),
         B("B → ПКМ", S.button(1), A.mouse("right")),
+    ))
+
+
+def gamepad_profile() -> Profile:
+    """Руль как виртуальный геймпад Xbox 360: руль — левый стик, педали — курки."""
+    B, S, A = Binding.make, InputSource, Action
+    return Profile("Руль как геймпад (Xbox)", (
+        B("Руль → левый стик", S.axis(0, "full"), A.stick("left", "right"), deadzone=0.02),
+        B("Газ → RT", S.axis(2, "pedal"), A.trigger("rt"), deadzone=0.02),
+        B("Тормоз → LT", S.axis(5, "pedal"), A.trigger("lt"), deadzone=0.02),
+        B("A → A", S.button(0), A.pad_button("a")),
+        B("B → B", S.button(1), A.pad_button("b")),
+        B("Крестовина ↑", S.hat(0, "up"), A.pad_button("dup")),
+        B("Крестовина ↓", S.hat(0, "down"), A.pad_button("ddown")),
+        B("Крестовина ←", S.hat(0, "left"), A.pad_button("dleft")),
+        B("Крестовина →", S.hat(0, "right"), A.pad_button("dright")),
     ))
 
 

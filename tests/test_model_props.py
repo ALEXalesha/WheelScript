@@ -7,10 +7,11 @@ from hypothesis import strategies as st
 
 from wheelscript import keys
 from wheelscript.model import (ACTION_KINDS, AXIS_MODES, CURVE, DEADZONE, DIRECTIONS, HAT_DIRS, MAX_BINDINGS,
-                               MAX_COMBO, MAX_NAME, MAX_PROFILES, MOUSE_BUTTONS, MOVE_SPEED, PRESS_MODES,
+                               MAX_COMBO, MAX_NAME, MAX_PROFILES, MOUSE_BUTTONS, MOVE_SPEED, PAD_BUTTONS,
+                               PAD_STICKS, PAD_TRIGGERS, PRESS_MODES,
                                SOURCE_KINDS, THRESHOLD, TICK_RATE, WHEEL_SPEED, Action, Binding, Config,
                                InputSource, Profile, Settings, clean_text, default_config, default_profile,
-                               unique_name)
+                               gamepad_profile, unique_name)
 
 from .strategies import bindings, configs, json_values, junk_action, junk_binding, junk_config, junk_source
 
@@ -40,6 +41,8 @@ def check_action(a: Action):
         assert WHEEL_SPEED[0] <= a.speed <= WHEEL_SPEED[1]
     if a.kind != "key":
         assert a.keys == ()
+    allowed_pad = {"pad_button": PAD_BUTTONS, "pad_stick": PAD_STICKS, "pad_trigger": PAD_TRIGGERS}.get(a.kind, ("",))
+    assert a.pad in allowed_pad, f"{a.kind}: pad={a.pad!r}"
 
 
 def check_text(t: str):
@@ -156,8 +159,14 @@ def test_huge_int_does_not_crash():
 
 
 def test_default_profile_and_config():
-    p = default_profile()
-    assert Profile.from_dict(p.to_dict()) == p
-    for b in p.bindings:
-        check_binding(b)
+    for p in (default_profile(), gamepad_profile()):
+        assert Profile.from_dict(p.to_dict()) == p
+        for b in p.bindings:
+            check_binding(b)
     check_config(default_config())
+
+
+def test_old_config_without_pad_field_still_loads():
+    """Конфиг из версии 2.0 (без поля pad) читается без потерь."""
+    old = {"kind": "key", "keys": ["w"], "button": "left", "direction": "right", "speed": 1500.0, "press": "hold"}
+    assert Action.from_dict(old) == Action.key(["w"])

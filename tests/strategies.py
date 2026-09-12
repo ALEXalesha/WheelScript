@@ -2,9 +2,10 @@
 
 from hypothesis import strategies as st
 
-from wheelscript.engine import DeviceState
-from wheelscript.model import (ACTION_KINDS, AXIS_MODES, DIRECTIONS, HAT_DIRS, MOUSE_BUTTONS, PRESS_MODES,
-                               SOURCE_KINDS, Action, Binding, Config, InputSource, Profile, Settings)
+from wheelscript.engine import NEUTRAL_PAD, DeviceState, PadState
+from wheelscript.model import (ACTION_KINDS, AXIS_MODES, DIRECTIONS, HAT_DIRS, MOUSE_BUTTONS, PAD_BUTTONS,
+                               PAD_STICKS, PAD_TRIGGERS, PRESS_MODES, SOURCE_KINDS, Action, Binding, Config,
+                               InputSource, Profile, Settings)
 
 DEV = "dev0"
 DEV2 = "dev1"
@@ -54,6 +55,9 @@ actions = st.one_of(
     st.builds(Action.mouse, st.sampled_from(MOUSE_BUTTONS), press),
     st.builds(Action.move, st.sampled_from(DIRECTIONS), st.floats(0, 5000)),
     st.builds(Action.wheel, st.sampled_from(DIRECTIONS), st.floats(0, 50)),
+    st.builds(Action.pad_button, st.sampled_from(PAD_BUTTONS), press),
+    st.builds(Action.stick, st.sampled_from(PAD_STICKS), st.sampled_from(DIRECTIONS)),
+    st.builds(Action.trigger, st.sampled_from(PAD_TRIGGERS)),
     st.just(Action.toggle()),
     st.just(Action()),
 )
@@ -138,6 +142,8 @@ class FakeOS:
         self.moves: list[tuple[int, int]] = []
         self.wheels: list[tuple[int, bool]] = []
         self.downs: list[str] = []
+        self.pad: PadState = NEUTRAL_PAD
+        self.pad_events = 0
 
     def apply(self, events):
         from wheelscript import keys as keymod
@@ -172,6 +178,17 @@ class FakeOS:
                 assert type(delta) is int and delta != 0 and delta % 120 == 0
                 assert isinstance(horizontal, bool)
                 self.wheels.append((delta, horizontal))
+            elif kind == "pad":
+                state = ev[1]
+                assert isinstance(state, PadState)
+                assert state != self.pad, "лишнее событие геймпада без изменений"
+                for v in (state.lx, state.ly, state.rx, state.ry):
+                    assert -1.0 <= v <= 1.0, f"стик вне диапазона: {v}"
+                for v in (state.lt, state.rt):
+                    assert 0.0 <= v <= 1.0, f"курок вне диапазона: {v}"
+                assert state.buttons <= set(PAD_BUTTONS)
+                self.pad = state
+                self.pad_events += 1
             elif kind == "enabled":
                 assert isinstance(ev[1], bool)
             else:

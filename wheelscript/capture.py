@@ -5,10 +5,13 @@ from __future__ import annotations
 from typing import Optional
 
 from .engine import DeviceState, States
-from .model import ANALOG_ACTIONS, InputSource
+from .model import InputSource
 
 AXIS_THRESHOLD = 0.5
 PEDAL_REST = 0.75
+# Для этих действий руль нужен целиком: влево — в одну сторону, вправо — в другую.
+# Курок сюда не входит: он от 0 до 1, половина оси или педаль ему подходят как есть.
+WHOLE_AXIS_ACTIONS = frozenset({"mouse_move", "mouse_wheel", "pad_stick"})
 
 
 class Capture:
@@ -80,7 +83,7 @@ class Capture:
 
 
 def adapt_source(src: InputSource, action_kind: str) -> InputSource:
-    """Для движения мыши/колеса ось руля нужна целиком (-1..+1), а не половина."""
-    if src.kind == "axis" and src.mode in ("pos", "neg") and action_kind in ANALOG_ACTIONS:
+    """Для движения мыши/колеса/стика ось руля нужна целиком (-1..+1), а не половина."""
+    if src.kind == "axis" and src.mode in ("pos", "neg") and action_kind in WHOLE_AXIS_ACTIONS:
         return InputSource.axis(src.index, "full", src.device)
     return src

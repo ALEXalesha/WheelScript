@@ -15,7 +15,8 @@ from typing import Optional
 
 from . import sendinput
 from .engine import DeviceState, Engine
-from .model import Profile
+from .gamepad import VirtualPad
+from .model import PAD_ACTIONS, Profile
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +46,13 @@ class InputService:
         self._toggle_key = "f8"
         self._tick = 1.0 / tick_rate
         self._enabled = False
+        self._has_pad = False
+        self.pad_status = "не используется"
+        self._pad = VirtualPad(self._on_pad_status)
+
+    def _on_pad_status(self, text: str) -> None:
+        self.pad_status = text
+        self.events.put(("pad_status", text))
 
     # --- API для интерфейса (потокобезопасно) ---
 
@@ -143,6 +151,7 @@ class InputService:
                     time.sleep(spare)
         finally:
             self._apply(self._engine.release_all())
+            self._pad.close()
             try:
                 pygame.quit()
             except Exception:  # noqa: BLE001
@@ -159,6 +168,9 @@ class InputService:
                 with self._lock:
                     states = dict(self._states)
                 out += self._engine.set_profile(arg, states, next(iter(states), None))
+                self._has_pad = any(b.enabled and b.action.kind in PAD_ACTIONS for b in arg.bindings)
+                if self._has_pad and self._engine.enabled:
+                    self._pad.apply(self._engine.pad_state)
             elif cmd == "enabled":
                 out += self._engine.set_enabled(bool(arg))
             elif cmd == "toggle":
@@ -182,6 +194,12 @@ class InputService:
             if ev[0] == "enabled":
                 self._enabled = ev[1]
                 self.events.put(ev)
+                # Геймпад «вставляем» сразу при включении, а не при первом нажатии:
+                # многие игры ищут контроллеры только при запуске или в меню.
+                if ev[1] and self._has_pad:
+                    self._pad.apply(self._engine.pad_state)
+            elif ev[0] == "pad":
+                self._pad.apply(ev[1])
         sendinput.apply(events)
 
     def _rebuild(self) -> None:

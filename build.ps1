@@ -20,6 +20,7 @@ if (-not (Test-Path "$root\assets\icon.ico")) { python tools\make_icon.py }
 python -m PyInstaller --noconfirm --clean --windowed --name WheelScript `
     --icon "$root\assets\icon.ico" `
     --add-data "$root\assets\icon.ico;assets" `
+    --collect-all vgamepad `
     --exclude-module numpy --exclude-module hypothesis --exclude-module pytest `
     --distpath "$root\dist" --workpath "$root\build\pyi" --specpath "$root\build" `
     "$root\run.py"

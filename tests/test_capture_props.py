@@ -124,7 +124,7 @@ def test_capture_result_is_canonical(base, seq):
 def test_adapt_source(src, kind):
     a = adapt_source(src, kind)
     assert adapt_source(a, kind) == a
-    if kind in ("mouse_move", "mouse_wheel") and src.kind == "axis" and src.mode in ("pos", "neg"):
+    if kind in ("mouse_move", "mouse_wheel", "pad_stick") and src.kind == "axis" and src.mode in ("pos", "neg"):
         assert a.mode == "full" and a.index == src.index and a.device == src.device
     else:
         assert a == src

@@ -4,7 +4,7 @@ from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, rule
 
-from wheelscript.engine import Engine
+from wheelscript.engine import NEUTRAL_PAD, Engine
 
 from .strategies import DEV, FakeOS, profiles, states, weird_dts
 
@@ -57,15 +57,18 @@ class EngineMachine(RuleBasedStateMachine):
     def os_matches_engine(self):
         assert self.os.keys == self.engine.held_keys()
         assert self.os.buttons == self.engine.held_buttons()
+        assert self.os.pad == self.engine.pad_state
+        assert self.os.pad.buttons == self.engine.held_pads()
 
     @invariant()
     def disabled_holds_nothing(self):
         if not self.engine.enabled:
             assert self.os.keys == set() and self.os.buttons == set()
+            assert self.os.pad == NEUTRAL_PAD
 
     def teardown(self):
         self.os.apply(self.engine.release_all())
-        assert self.os.keys == set() and self.os.buttons == set()
+        assert self.os.keys == set() and self.os.buttons == set() and self.os.pad == NEUTRAL_PAD
 
 
 EngineMachine.TestCase.settings = settings(max_examples=200, stateful_step_count=40, deadline=None)

@@ -21,9 +21,22 @@ ACTION_LABELS = {
     "mouse_button": "Кнопка мыши",
     "mouse_move": "Движение мыши",
     "mouse_wheel": "Колесо мыши",
+    "pad_button": "Кнопка геймпада",
+    "pad_stick": "Стик геймпада",
+    "pad_trigger": "Курок геймпада (LT/RT)",
     "toggle": "Вкл/выкл маппинг",
     "none": "Ничего",
 }
+PAD_BUTTON_LABELS = {
+    "a": "A", "b": "B", "x": "X", "y": "Y",
+    "lb": "LB (левый бампер)", "rb": "RB (правый бампер)",
+    "back": "Back / View", "start": "Start / Menu",
+    "ls": "Нажатие левого стика (LS)", "rs": "Нажатие правого стика (RS)",
+    "guide": "Guide (кнопка Xbox)",
+    "dup": "Крестовина ↑", "ddown": "Крестовина ↓", "dleft": "Крестовина ←", "dright": "Крестовина →",
+}
+PAD_STICK_LABELS = {"left": "левый стик", "right": "правый стик"}
+PAD_TRIGGER_LABELS = {"lt": "LT (левый курок)", "rt": "RT (правый курок)"}
 MOUSE_BUTTON_LABELS = {
     "left": "ЛКМ", "right": "ПКМ", "middle": "СКМ (колесо)",
     "x1": "Боковая X1 (назад)", "x2": "Боковая X2 (вперёд)",
@@ -61,6 +74,12 @@ def action_text(a: Action) -> str:
         return f"Мышь {DIRECTION_LABELS.get(a.direction, a.direction)}"
     if a.kind == "mouse_wheel":
         return f"Колесо {DIRECTION_LABELS.get(a.direction, a.direction)}"
+    if a.kind == "pad_button":
+        return f"Геймпад {PAD_BUTTON_LABELS.get(a.pad, a.pad)}"
+    if a.kind == "pad_stick":
+        return f"Геймпад: {PAD_STICK_LABELS.get(a.pad, a.pad)} {DIRECTION_LABELS.get(a.direction, a.direction)}"
+    if a.kind == "pad_trigger":
+        return f"Геймпад {PAD_TRIGGER_LABELS.get(a.pad, a.pad)}"
     return ACTION_LABELS.get(a.kind, a.kind)
 
 
@@ -78,7 +97,7 @@ def params_text(b: Binding) -> str:
             parts.append(f"кривая {b.curve:g}")
     elif not a.is_analog and b.source.kind == "axis":
         parts.append(f"порог {b.threshold:.0%}")
-    if a.kind in ("key", "mouse_button") and a.press != "hold":
+    if a.kind in ("key", "mouse_button", "pad_button") and a.press != "hold":
         parts.append({"tap": "одно нажатие", "toggle": "залипание"}[a.press])
     if b.invert:
         parts.append("инверсия")

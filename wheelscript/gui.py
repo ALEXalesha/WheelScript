@@ -16,7 +16,7 @@ from .capture import Capture, adapt_source
 from .engine import binding_value, shape
 from .model import (ANALOG_ACTIONS, DEFAULT_MOVE_SPEED, DEFAULT_WHEEL_SPEED, MOVE_SPEED, TICK_RATE,
                     WHEEL_SPEED, Binding, Config, InputSource, Profile, Settings, clean_text,
-                    default_profile, unique_name)
+                    default_profile, gamepad_profile, unique_name)
 from .presets import PRESETS
 
 log = logging.getLogger(__name__)
@@ -348,7 +348,7 @@ class Monitor(ttk.LabelFrame):
 class BindingDialog(tk.Toplevel):
     """Редактор одной привязки. Пока открыт, маппинг на паузе, чтобы руль не «кликал» по окну."""
 
-    KINDS = ("key", "mouse_button", "mouse_move", "mouse_wheel", "toggle")
+    KINDS = ("key", "mouse_button", "mouse_move", "mouse_wheel", "pad_button", "pad_stick", "pad_trigger", "toggle")
 
     def __init__(self, app: "App", binding: Binding, title: str):
         super().__init__(app.root)
@@ -368,6 +368,10 @@ class BindingDialog(tk.Toplevel):
         self.button_val = a.button
         self.move_dir = a.direction if a.kind == "mouse_move" else "right"
         self.wheel_dir = a.direction if a.kind == "mouse_wheel" else "up"
+        self.pad_button_val = a.pad if a.kind == "pad_button" else "a"
+        self.stick_val = a.pad if a.kind == "pad_stick" else "left"
+        self.stick_dir = a.direction if a.kind == "pad_stick" else "right"
+        self.trigger_val = a.pad if a.kind == "pad_trigger" else "rt"
         self.move_speed = tk.DoubleVar(value=a.speed if a.kind == "mouse_move" else DEFAULT_MOVE_SPEED)
         self.wheel_speed = tk.DoubleVar(value=a.speed if a.kind == "mouse_wheel" else DEFAULT_WHEEL_SPEED)
         self.threshold = tk.DoubleVar(value=binding.threshold)
@@ -465,6 +469,19 @@ class BindingDialog(tk.Toplevel):
                         textvariable=self.wheel_speed).pack(side="left")
             ttk.Label(row, text=" щелчков колеса в секунду").pack(side="left")
             self._row(f, 1, "Скорость", row)
+        elif k in ("pad_button", "pad_stick", "pad_trigger"):
+            if k == "pad_button":
+                self._row(f, 0, "Кнопка геймпада",
+                          Choice(f, labels.PAD_BUTTON_LABELS, self.pad_button_val, self._set_pad_button))
+                self._row(f, 1, "Режим нажатия", Choice(f, labels.PRESS_LABELS, self.press_val, self._set_press))
+            elif k == "pad_stick":
+                self._row(f, 0, "Стик", Choice(f, labels.PAD_STICK_LABELS, self.stick_val, self._set_stick))
+                self._row(f, 1, "Направление",
+                          Choice(f, labels.DIRECTION_LABELS, self.stick_dir, self._set_stick_dir))
+            else:
+                self._row(f, 0, "Курок", Choice(f, labels.PAD_TRIGGER_LABELS, self.trigger_val, self._set_trigger))
+            ttk.Label(f, text="Игра увидит виртуальный геймпад Xbox 360 (нужен драйвер ViGEmBus).",
+                      foreground=OFF_COLOR).grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 4))
         else:
             ttk.Label(f, text="Нажатие включает или выключает весь маппинг — то же, что горячая клавиша.",
                       foreground=OFF_COLOR).grid(row=0, column=0, columnspan=2, sticky="w", pady=4)
@@ -533,6 +550,10 @@ class BindingDialog(tk.Toplevel):
     def _set_button(self, v): self.button_val = v
     def _set_move_dir(self, v): self.move_dir = v
     def _set_wheel_dir(self, v): self.wheel_dir = v
+    def _set_pad_button(self, v): self.pad_button_val = v
+    def _set_stick(self, v): self.stick_val = v
+    def _set_stick_dir(self, v): self.stick_dir = v
+    def _set_trigger(self, v): self.trigger_val = v
 
     def _current_source(self) -> InputSource:
         src = self.input.source
@@ -548,13 +569,17 @@ class BindingDialog(tk.Toplevel):
             direction, speed = self.move_dir, _float(self.move_speed, DEFAULT_MOVE_SPEED)
         elif k == "mouse_wheel":
             direction, speed = self.wheel_dir, _float(self.wheel_speed, DEFAULT_WHEEL_SPEED)
+        elif k == "pad_stick":
+            direction, speed = self.stick_dir, DEFAULT_MOVE_SPEED
         else:
             direction, speed = "right", DEFAULT_MOVE_SPEED
+        pad = {"pad_button": self.pad_button_val, "pad_stick": self.stick_val,
+               "pad_trigger": self.trigger_val}.get(k, "")
         return Binding.from_dict({
             "name": self.name_var.get(),
             "source": self._current_source().to_dict(),
             "action": {"kind": k, "keys": list(self.keys_val), "button": self.button_val,
-                       "direction": direction, "speed": speed, "press": self.press_val},
+                       "direction": direction, "speed": speed, "press": self.press_val, "pad": pad},
             "enabled": bool(self.enabled.get()),
             "threshold": _float(self.threshold, 0.5),
             "deadzone": _float(self.deadzone, 0.05),
@@ -593,7 +618,7 @@ class BindingDialog(tk.Toplevel):
                 c.create_line(mid, 2, mid, 24, fill="#64748b")
             else:
                 c.create_rectangle(1, 4, 1 + abs(m) * (w - 2), 22, fill=ACCENT, outline="")
-            self.preview_text.configure(text=f"значение {v:+.2f} → скорость {abs(m):.0%}",
+            self.preview_text.configure(text=f"значение {v:+.2f} → сила {abs(m):.0%}",
                                         foreground=ON_COLOR if m else OFF_COLOR)
         else:
             mag = abs(v)
@@ -704,6 +729,7 @@ class App:
         menu = tk.Menu(mb, tearoff=False)
         menu.add_command(label="Новый пустой профиль…", command=self._profile_new)
         menu.add_command(label="Новый стандартный (PXN V9: руль как мышь)…", command=self._profile_new_default)
+        menu.add_command(label="Новый: руль как геймпад Xbox…", command=self._profile_new_gamepad)
         menu.add_command(label="Копия текущего…", command=self._profile_copy)
         menu.add_command(label="Переименовать…", command=self._profile_rename)
         menu.add_command(label="Удалить", command=self._profile_delete)
@@ -774,6 +800,9 @@ class App:
         ttk.Button(bottom, text="Ярлык в «Пуск»", command=self._make_shortcut).pack(side="right", padx=(0, 6))
         self.error_lbl = ttk.Label(bottom, text="", foreground="#dc2626")
         self.error_lbl.pack(side="right", padx=12)
+        self.pad_lbl = ttk.Label(bottom, text=f"Геймпад: {getattr(self.service, 'pad_status', 'не используется')}",
+                                 style="Hint.TLabel")
+        self.pad_lbl.pack(side="left", padx=(18, 0))
 
     # --- конфиг ---
 
@@ -939,6 +968,12 @@ class App:
         if name:
             self._add_profile(Profile(name, base.bindings))
 
+    def _profile_new_gamepad(self) -> None:
+        base = gamepad_profile()
+        name = self._ask_name("Имя нового профиля:", unique_name(base.name, self._taken()))
+        if name:
+            self._add_profile(Profile(name, base.bindings))
+
     def _profile_copy(self) -> None:
         name = self._ask_name("Имя копии:", unique_name(f"{self.profile.name} (копия)", self._taken()))
         if name:
@@ -1043,6 +1078,8 @@ class App:
                 ev = self.service.events.get_nowait()
                 if ev[0] == "devices":
                     self._refresh_tree()
+                elif ev[0] == "pad_status":
+                    self.pad_lbl.configure(text=f"Геймпад: {ev[1]}")
                 elif ev[0] == "error":
                     self._error = ev[1]
                     self.error_lbl.configure(text=f"Ошибка: {ev[1]}"[:120])

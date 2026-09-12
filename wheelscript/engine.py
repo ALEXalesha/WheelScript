@@ -26,6 +26,7 @@ HYSTERESIS = 0.05
 WHEEL_DELTA = 120
 
 MOVE_VEC = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
+PAD_VEC = {"left": (-1, 0), "right": (1, 0), "up": (0, 1), "down": (0, -1)}  # в XInput +Y = вверх
 WHEEL_VEC = {"up": (1, False), "down": (-1, False), "right": (1, True), "left": (-1, True)}
 
 
@@ -39,6 +40,21 @@ class DeviceState:
 
 
 States = Mapping[str, DeviceState]
+
+
+@dataclass(frozen=True)
+class PadState:
+    """Полное состояние виртуального геймпада: стики [-1, 1], курки [0, 1], зажатые кнопки."""
+    buttons: frozenset[str] = frozenset()
+    lx: float = 0.0
+    ly: float = 0.0
+    rx: float = 0.0
+    ry: float = 0.0
+    lt: float = 0.0
+    rt: float = 0.0
+
+
+NEUTRAL_PAD = PadState()
 
 
 def _finite(x: object) -> Optional[float]:
@@ -135,12 +151,21 @@ class Engine:
         self._blocked: set[int] = set()
         self._keys: Counter[str] = Counter()
         self._buttons: Counter[str] = Counter()
+        self._pads: Counter[str] = Counter()
+        self._pad_last = NEUTRAL_PAD
         self._acc = [0.0, 0.0]
         self._wacc = [0.0, 0.0]
 
     @property
     def enabled(self) -> bool:
         return self._enabled
+
+    @property
+    def pad_state(self) -> PadState:
+        return self._pad_last
+
+    def held_pads(self) -> frozenset[str]:
+        return frozenset(k for k, c in self._pads.items() if c > 0)
 
     @property
     def bindings(self) -> tuple[Binding, ...]:
@@ -195,6 +220,8 @@ class Engine:
         dt = _clamp(_finite(dt) or 0.0, 0.0, MAX_DT)
         events: list = []
         mx = my = wv = wh = 0.0
+        sticks = [[0.0, 0.0], [0.0, 0.0]]
+        triggers = [0.0, 0.0]
 
         for i, b in enumerate(self._bindings):
             a = b.action
@@ -208,6 +235,16 @@ class Engine:
                 m = shape(abs(v), b.deadzone, b.curve)
                 if v < 0:
                     m = -m
+                if a.kind == "pad_stick":
+                    vx, vy = PAD_VEC[a.direction]
+                    stick = sticks[0 if a.pad == "left" else 1]
+                    stick[0] += vx * m
+                    stick[1] += vy * m
+                    continue
+                if a.kind == "pad_trigger":
+                    k = 0 if a.pad == "lt" else 1
+                    triggers[k] = max(triggers[k], abs(m))
+                    continue
                 amount = m * a.speed * dt
                 if a.kind == "mouse_move":
                     vx, vy = MOVE_VEC[a.direction]
@@ -259,6 +296,14 @@ class Engine:
                 events.append(("wheel", nv * WHEEL_DELTA, False))
             if nh:
                 events.append(("wheel", nh * WHEEL_DELTA, True))
+            # vgamepad не проверяет диапазон: 1.2 * 32767 переполнит short и стик прыгнет в другую сторону
+            pad = PadState(self.held_pads(),
+                           _clamp(sticks[0][0], -1.0, 1.0), _clamp(sticks[0][1], -1.0, 1.0),
+                           _clamp(sticks[1][0], -1.0, 1.0), _clamp(sticks[1][1], -1.0, 1.0),
+                           _clamp(triggers[0], 0.0, 1.0), _clamp(triggers[1], 0.0, 1.0))
+            if pad != self._pad_last:
+                self._pad_last = pad
+                events.append(("pad", pad))
         return events
 
     # --- внутреннее ---
@@ -310,6 +355,8 @@ class Engine:
             if self._buttons[a.button] == 0:
                 events.append(("mouse", a.button, True))
             self._buttons[a.button] += 1
+        elif a.kind == "pad_button":
+            self._pads[a.pad] += 1  # состояние геймпада уходит одним событием в конце шага
 
     def _release(self, a: Action, events: list) -> None:
         if a.kind == "key":
@@ -327,6 +374,12 @@ class Engine:
                 events.append(("mouse", a.button, False))
             else:
                 self._buttons[a.button] = c
+        elif a.kind == "pad_button":
+            c = self._pads[a.pad] - 1
+            if c <= 0:
+                self._pads.pop(a.pad, None)
+            else:
+                self._pads[a.pad] = c
 
     def _release_outputs(self) -> list:
         events: list = []
@@ -343,6 +396,10 @@ class Engine:
             events.append(("mouse", b, False))
         self._keys.clear()
         self._buttons.clear()
+        self._pads.clear()
+        if self._pad_last != NEUTRAL_PAD:
+            self._pad_last = NEUTRAL_PAD
+            events.append(("pad", NEUTRAL_PAD))
         self._acc = [0.0, 0.0]
         self._wacc = [0.0, 0.0]
         return events
