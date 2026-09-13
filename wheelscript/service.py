@@ -17,6 +17,7 @@ from . import sendinput
 from .engine import DeviceState, Engine
 from .gamepad import VirtualPad
 from .model import PAD_ACTIONS, Profile
+from .rumble import RumbleRelay, WheelHaptic, player_index
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +49,12 @@ class InputService:
         self._enabled = False
         self._has_pad = False
         self.pad_status = "не используется"
-        self._pad = VirtualPad(self._on_pad_status)
+        self._relay = RumbleRelay()
+        self._haptic = WheelHaptic()
+        self._rumble = 1.0
+        self.rumble_status = ""
+        self._pad = VirtualPad(self._on_pad_status, self._relay.set_game)
+        self._own_slot: Optional[int] = None  # XInput-слот нашего геймпада: его не читаем как ввод
 
     def _on_pad_status(self, text: str) -> None:
         self.pad_status = text
@@ -96,6 +102,12 @@ class InputService:
     def set_tick_rate(self, hz: int) -> None:
         self._cmds.put(("tick", hz))
 
+    def set_rumble(self, strength: float) -> None:
+        self._cmds.put(("rumble", strength))
+
+    def rumble_test(self) -> None:
+        self._cmds.put(("rumble_test", None))
+
     # --- поток ---
 
     def _run(self) -> None:
@@ -126,6 +138,10 @@ class InputService:
                             rebuild = True
                         elif ev.type == pygame.JOYAXISMOTION:
                             self._mark_known(ev.instance_id, ev.axis)
+                    slot = self._pad.slot
+                    if slot != self._own_slot:  # свой геймпад появился или исчез — пересобрать список
+                        self._own_slot = slot
+                        rebuild = True
                     if rebuild:
                         out += self._engine.release_all()
                         self._rebuild()
@@ -146,11 +162,13 @@ class InputService:
                     out += self._engine.release_all()
                     self.events.put(("error", str(e)))
                 self._apply(out)
+                self._rumble_tick()
                 spare = self._tick - (time.perf_counter() - started)
                 if spare > 0:
                     time.sleep(spare)
         finally:
             self._apply(self._engine.release_all())
+            self._haptic.close()
             self._pad.close()
             try:
                 pygame.quit()
@@ -188,12 +206,28 @@ class InputService:
                 self._toggle_key = arg or ""
             elif cmd == "tick":
                 self._tick = 1.0 / max(20, min(1000, int(arg)))
+            elif cmd == "rumble":
+                self._rumble = max(0.0, min(1.0, float(arg))) if arg == arg else 0.0
+            elif cmd == "rumble_test":
+                self._relay.test(time.monotonic(), self._rumble)
+
+    def _rumble_tick(self) -> None:
+        # Вибрация только пока маппинг работает: на паузе (открыт редактор) и после
+        # выключения руль молчит, даже если игра всё ещё «вибрирует» геймпадом.
+        try:
+            cmd = self._relay.tick(time.monotonic(), self._engine.enabled and self._suspend == 0, self._rumble)
+            if cmd is not None:
+                self._haptic.apply(cmd)
+        except Exception:  # noqa: BLE001
+            log.exception("rumble tick failed")
 
     def _apply(self, events: list) -> None:
         for ev in events:
             if ev[0] == "enabled":
                 self._enabled = ev[1]
                 self.events.put(ev)
+                if not ev[1]:
+                    self._relay.reset()
                 # Геймпад «вставляем» сразу при включении, а не при первом нажатии:
                 # многие игры ищут контроллеры только при запуске или в меню.
                 if ev[1] and self._has_pad:
@@ -209,6 +243,9 @@ class InputService:
             try:
                 j = pg.joystick.Joystick(i)
                 j.init()
+                if self._own_slot is not None and player_index(pg, j) == self._own_slot:
+                    log.info("skip own virtual gamepad: %s (XInput slot %s)", j.get_name(), self._own_slot)
+                    continue
                 guid = j.get_guid()
                 seen[guid] = seen.get(guid, 0) + 1
                 key = guid if seen[guid] == 1 else f"{guid}#{seen[guid]}"
@@ -218,6 +255,13 @@ class InputService:
                 log.exception("joystick %s init failed", i)
         self._joys = joys
         self._known = {k: set() for k, _ in joys}
+        # Вибрируем первым устройством с вибромотором (обычно это и есть руль).
+        if self._haptic.attach(pg, [j for _, j in joys]):
+            status = f"вибрирует: {self._haptic.name}"
+        else:
+            status = "у руля нет вибромотора" if joys else "руль не подключён"
+        self.rumble_status = status
+        self.events.put(("rumble_status", status))
         with self._lock:
             self._infos = infos
         self.events.put(("devices", infos))

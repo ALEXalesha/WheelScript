@@ -34,6 +34,8 @@ class FakeService:
     def resume(self): self.suspended -= 1
     def set_toggle_key(self, k): pass
     def set_tick_rate(self, hz): pass
+    def set_rumble(self, v): self.rumble = v
+    def rumble_test(self): self.rumble_tests = getattr(self, "rumble_tests", 0) + 1
     def stop(self): pass
 
 
@@ -125,3 +127,69 @@ def test_monitor_draws(app):
     app.monitor.update_view(states, infos)
     app.root.update()
     assert app.monitor.canvas.find_all()
+
+
+def test_rumble_slider_saves_and_pushes(app):
+    app.rumble_scale.set(40)
+    app._set_rumble()
+    assert app.cfg.settings.rumble == 40
+    assert app.service.rumble == 0.4
+    assert app.rumble_pct.cget("text") == "40%"
+    app.rumble_test_btn.invoke()
+    assert app.service.rumble_tests == 1
+    app.service.events.put(("rumble_status", "вибрирует: V9GEN2"))
+    app._poll()
+    assert str(app.rumble_lbl.cget("text")) == "вибрирует: V9GEN2"
+
+
+def _all_widgets(w):
+    yield w
+    for c in w.winfo_children():
+        yield from _all_widgets(c)
+
+
+def test_theme_switch_retints_everything(app):
+    """После смены темы ни одно поле, холст или меню не остаётся в цветах старой темы."""
+    from tkinter import ttk
+
+    from wheelscript import theme
+    for mode, pal in (("dark", theme.DARK), ("light", theme.LIGHT), ("dark", theme.DARK)):
+        app._set_theme(mode)
+        assert app.cfg.settings.theme == mode
+        assert (ttk.Style(app.root).theme_use() == "clam") == pal["dark"]
+        seen = set()
+        for w in _all_widgets(app.root):
+            cls = w.winfo_class()
+            seen.add(cls)
+            if cls == "Entry":
+                assert str(w.cget("readonlybackground")) == pal["entry_bg"], w
+            elif cls == "Canvas" and w is not app.dot:
+                assert str(w.cget("background")) == pal["surface"], w
+            elif cls == "Menu":
+                assert str(w.cget("background")) == pal["menu_bg"], w
+        assert {"Entry", "Canvas", "Menu"} <= seen
+        assert str(app.tree.tag_configure("live", "background")) == pal["live_bg"]
+        assert str(app.dot.cget("background")) == pal["bg"]
+    for pal in (theme.LIGHT, theme.DARK):
+        for k, v in pal.items():
+            if isinstance(v, str):
+                app.root.winfo_rgb(v)  # Tk понимает каждый цвет палитры
+    app._set_theme("light")
+
+
+def test_dialog_follows_dark_theme(app):
+    from wheelscript import theme
+    app._set_theme("dark")
+    seen = {}
+
+    def peek():
+        dlg = [w for w in app.root.winfo_children() if isinstance(w, tk.Toplevel)][0]
+        seen["bg"] = str(dlg.cget("background"))
+        seen["preview"] = str(dlg.preview.cget("background"))
+        seen["entry"] = str(dlg.input.entry.cget("readonlybackground"))
+        dlg._cancel()
+
+    app.root.after(100, peek)
+    app._add(Binding.make("t", InputSource(), Action.key(["e"])))
+    assert seen == {"bg": theme.DARK["bg"], "preview": theme.DARK["surface"], "entry": theme.DARK["entry_bg"]}
+    app._set_theme("light")

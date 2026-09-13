@@ -11,23 +11,20 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Callable, Optional
 
-from . import APP_NAME, __version__, keys, labels, storage
+from . import APP_NAME, __version__, keys, labels, storage, theme
 from .capture import Capture, adapt_source
 from .engine import binding_value, shape
-from .model import (ANALOG_ACTIONS, DEFAULT_MOVE_SPEED, DEFAULT_WHEEL_SPEED, MOVE_SPEED, TICK_RATE,
+from .model import (ANALOG_ACTIONS, DEFAULT_MOVE_SPEED, DEFAULT_WHEEL_SPEED, MOVE_SPEED, RUMBLE, TICK_RATE,
                     WHEEL_SPEED, Binding, Config, InputSource, Profile, Settings, clean_text,
                     default_profile, gamepad_profile, unique_name)
 from .presets import PRESETS
+from .theme import P
 
 log = logging.getLogger(__name__)
 
 POLL_MS = 40
 CAPTURE_TIMEOUT = 15.0
-ACCENT = "#2563eb"
-ON_COLOR = "#16a34a"
-OFF_COLOR = "#6b7280"
-WAIT_BG = "#fff3c4"
-LIVE_BG = "#dbeafe"
+THEME_CHECK_POLLS = 50  # «как в системе»: сверяться с Windows раз в ~2 с
 LABEL_W = 20
 
 
@@ -36,6 +33,11 @@ def _float(var: tk.Variable, default: float) -> float:
         return float(var.get())
     except (tk.TclError, ValueError):
         return default
+
+
+def _entry_style() -> dict:
+    return dict(readonlybackground=P["entry_bg"], foreground=P["entry_fg"], relief="flat", bd=0,
+                highlightthickness=1, highlightbackground=P["border"], highlightcolor=P["accent"])
 
 
 class Choice(ttk.Combobox):
@@ -66,8 +68,8 @@ class InputField(ttk.Frame):
         self.source = source
         self.on_change = on_change
         self.var = tk.StringVar()
-        self.entry = tk.Entry(self, textvariable=self.var, state="readonly", readonlybackground="white",
-                              relief="solid", bd=1, cursor="hand2", width=44)
+        self.entry = tk.Entry(self, textvariable=self.var, state="readonly", cursor="hand2", width=44,
+                              **_entry_style())
         self.entry.pack(side="left", fill="x", expand=True, ipady=4)
         self.entry.bind("<Button-1>", self._click)
         self.entry.bind("<Escape>", self._escape)
@@ -109,7 +111,7 @@ class InputField(ttk.Frame):
             return
         self._capture = Capture(states)
         self._deadline = time.monotonic() + CAPTURE_TIMEOUT
-        self.entry.configure(readonlybackground=WAIT_BG)
+        self.entry.configure(readonlybackground=P["wait_bg"])
         self.var.set("жду: нажми кнопку, сдвинь ось или крестовину…  (Esc — отмена)")
         self.entry.focus_set()
         self._poll()
@@ -136,7 +138,7 @@ class InputField(ttk.Frame):
             self.after_cancel(self._job)
             self._job = None
         self._capture = None
-        self.entry.configure(readonlybackground="white")
+        self.entry.configure(readonlybackground=P["entry_bg"])
 
     def cancel(self) -> None:
         self._stop()
@@ -170,8 +172,8 @@ class KeyField(ttk.Frame):
         self.allow_empty = allow_empty
         self.on_capture = on_capture
         self.var = tk.StringVar()
-        self.entry = tk.Entry(self, textvariable=self.var, state="readonly", readonlybackground="white",
-                              relief="solid", bd=1, cursor="hand2", width=width)
+        self.entry = tk.Entry(self, textvariable=self.var, state="readonly", cursor="hand2", width=width,
+                              **_entry_style())
         self.entry.pack(side="left", fill="x", expand=True, ipady=4)
         self.entry.bind("<Button-1>", self._click)
         self.entry.bind("<KeyPress>", self._press)
@@ -203,7 +205,7 @@ class KeyField(ttk.Frame):
         self._collected.clear()
         if self.on_capture:
             self.on_capture(True)
-        self.entry.configure(readonlybackground=WAIT_BG)
+        self.entry.configure(readonlybackground=P["wait_bg"])
         self.var.set("нажми клавишу" + (" или сочетание" if self.combo else "") + "…  (Esc — отмена)")
         self.entry.focus_set()
         self._job = self.after(int(CAPTURE_TIMEOUT * 1000), self._finish)
@@ -240,7 +242,7 @@ class KeyField(ttk.Frame):
         if self._job:
             self.after_cancel(self._job)
             self._job = None
-        self.entry.configure(readonlybackground="white")
+        self.entry.configure(readonlybackground=P["entry_bg"])
         if self.on_capture:
             self.on_capture(False)
         combo = keys.normalize_combo(self._collected)
@@ -277,8 +279,8 @@ class Monitor(ttk.LabelFrame):
         self.device = ttk.Combobox(self, state="readonly")
         self.device.pack(fill="x")
         self.device.bind("<<ComboboxSelected>>", self._changed)
-        self.canvas = tk.Canvas(self, width=320, height=430, bg="white", highlightthickness=1,
-                                highlightbackground="#cbd5e1")
+        self.canvas = tk.Canvas(self, width=320, height=430, bg=P["surface"], highlightthickness=1,
+                                highlightbackground=P["border"])
         self.canvas.pack(fill="both", expand=True, pady=(8, 0))
         self._last = None
 
@@ -312,36 +314,36 @@ class Monitor(ttk.LabelFrame):
         w = max(c.winfo_width(), 200)
         if st is None:
             c.create_text(w / 2, 60, text="Руль не найден.\nПодключи его — список обновится сам.",
-                          justify="center", fill=OFF_COLOR)
+                          justify="center", fill=P["off"])
             return
         y = 8
         x0, x1 = 58, w - 58
         mid = (x0 + x1) / 2
         for i, v in enumerate(st.axes):
-            c.create_text(8, y + 8, text=f"Ось {i}", anchor="w", fill="#334155")
-            c.create_rectangle(x0, y + 2, x1, y + 14, outline="#cbd5e1", fill="#f1f5f9")
+            c.create_text(8, y + 8, text=f"Ось {i}", anchor="w", fill=P["text"])
+            c.create_rectangle(x0, y + 2, x1, y + 14, outline=P["border"], fill=P["surface2"])
             if v is None:
-                c.create_text(mid, y + 8, text="ещё не двигалась", fill="#94a3b8", font=("Segoe UI", 7))
+                c.create_text(mid, y + 8, text="ещё не двигалась", fill=P["faint"], font=("Segoe UI", 7))
             else:
                 xv = mid + v * (x1 - x0) / 2
-                c.create_rectangle(min(mid, xv), y + 2, max(mid, xv), y + 14, fill=ACCENT, outline="")
-                c.create_line(mid, y, mid, y + 16, fill="#94a3b8")
-                c.create_text(w - 8, y + 8, text=f"{v:+.2f}", anchor="e", fill="#334155")
+                c.create_rectangle(min(mid, xv), y + 2, max(mid, xv), y + 14, fill=P["accent"], outline="")
+                c.create_line(mid, y, mid, y + 16, fill=P["faint"])
+                c.create_text(w - 8, y + 8, text=f"{v:+.2f}", anchor="e", fill=P["text"])
             y += 20
         y += 6
-        c.create_text(8, y, text="Кнопки", anchor="nw", fill="#334155")
+        c.create_text(8, y, text="Кнопки", anchor="nw", fill=P["text"])
         y += 18
         cols = max(1, int((w - 16) // 34))
         for i, pressed in enumerate(st.buttons):
             r, col = divmod(i, cols)
             x, yy = 8 + col * 34, y + r * 26
-            c.create_rectangle(x, yy, x + 30, yy + 22, fill=ACCENT if pressed else "#f1f5f9", outline="#cbd5e1")
-            c.create_text(x + 15, yy + 11, text=str(i), fill="white" if pressed else "#334155")
+            c.create_rectangle(x, yy, x + 30, yy + 22, fill=P["accent"] if pressed else P["surface2"], outline=P["border"])
+            c.create_text(x + 15, yy + 11, text=str(i), fill="#ffffff" if pressed else P["text"])
         y += ((len(st.buttons) + cols - 1) // cols) * 26 + 8
         for i, (hx, hy) in enumerate(st.hats):
             arrow = {(0, 1): "↑", (0, -1): "↓", (-1, 0): "←", (1, 0): "→",
                      (1, 1): "↗", (-1, 1): "↖", (1, -1): "↘", (-1, -1): "↙"}.get((hx, hy), "·")
-            c.create_text(8, y, text=f"Крестовина {i}:  {arrow}", anchor="nw", fill="#334155")
+            c.create_text(8, y, text=f"Крестовина {i}:  {arrow}", anchor="nw", fill=P["text"])
             y += 20
 
 
@@ -414,7 +416,7 @@ class BindingDialog(tk.Toplevel):
 
         pv = ttk.LabelFrame(body, text="Проверка — покрути / нажми на руле", padding=8)
         pv.grid(row=6, column=0, columnspan=2, sticky="we", pady=(8, 0))
-        self.preview = tk.Canvas(pv, height=26, bg="white", highlightthickness=0)
+        self.preview = tk.Canvas(pv, height=26, bg=P["surface"], highlightthickness=0)
         self.preview.pack(fill="x")
         self.preview_text = ttk.Label(pv, text="")
         self.preview_text.pack(anchor="w", pady=(4, 0))
@@ -433,6 +435,8 @@ class BindingDialog(tk.Toplevel):
         px = app.root.winfo_rootx() + (app.root.winfo_width() - self.winfo_width()) // 2
         py = app.root.winfo_rooty() + (app.root.winfo_height() - self.winfo_height()) // 3
         self.geometry(f"+{max(px, 0)}+{max(py, 0)}")
+        theme.retint(self)
+        theme.set_titlebar(self, P["dark"])
         self.grab_set()
         self.focus_set()
         self._job = self.after(POLL_MS, self._tick)
@@ -481,10 +485,10 @@ class BindingDialog(tk.Toplevel):
             else:
                 self._row(f, 0, "Курок", Choice(f, labels.PAD_TRIGGER_LABELS, self.trigger_val, self._set_trigger))
             ttk.Label(f, text="Игра увидит виртуальный геймпад Xbox 360 (нужен драйвер ViGEmBus).",
-                      foreground=OFF_COLOR).grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 4))
+                      foreground=P["off"]).grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 4))
         else:
             ttk.Label(f, text="Нажатие включает или выключает весь маппинг — то же, что горячая клавиша.",
-                      foreground=OFF_COLOR).grid(row=0, column=0, columnspan=2, sticky="w", pady=4)
+                      foreground=P["off"]).grid(row=0, column=0, columnspan=2, sticky="w", pady=4)
 
     def _scale(self, parent, r: int, text: str, var: tk.DoubleVar, lo: float, hi: float, fmt) -> None:
         ttk.Label(parent, text=text, width=LABEL_W).grid(row=r, column=0, sticky="w", pady=2)
@@ -604,31 +608,31 @@ class BindingDialog(tk.Toplevel):
         c = self.preview
         c.delete("all")
         w = max(c.winfo_width(), 200)
-        c.create_rectangle(1, 4, w - 1, 22, outline="#cbd5e1", fill="#f1f5f9")
+        c.create_rectangle(1, 4, w - 1, 22, outline=P["border"], fill=P["surface2"])
         if v is None:
             self.preview_text.configure(text="нет данных: ввод не назначен или ось ещё не двигалась",
-                                        foreground=OFF_COLOR)
+                                        foreground=P["off"])
             return
         signed = b.source.kind == "axis" and b.source.mode == "full"
         if b.action.is_analog:
             m = shape(abs(v), b.deadzone, b.curve) * (1 if v >= 0 else -1)
             if signed:
                 mid = w / 2
-                c.create_rectangle(min(mid, mid + m * mid), 4, max(mid, mid + m * mid), 22, fill=ACCENT, outline="")
-                c.create_line(mid, 2, mid, 24, fill="#64748b")
+                c.create_rectangle(min(mid, mid + m * mid), 4, max(mid, mid + m * mid), 22, fill=P["accent"], outline="")
+                c.create_line(mid, 2, mid, 24, fill=P["tick"])
             else:
-                c.create_rectangle(1, 4, 1 + abs(m) * (w - 2), 22, fill=ACCENT, outline="")
+                c.create_rectangle(1, 4, 1 + abs(m) * (w - 2), 22, fill=P["accent"], outline="")
             self.preview_text.configure(text=f"значение {v:+.2f} → сила {abs(m):.0%}",
-                                        foreground=ON_COLOR if m else OFF_COLOR)
+                                        foreground=P["on"] if m else P["off"])
         else:
             mag = abs(v)
             active = mag >= b.threshold
-            c.create_rectangle(1, 4, 1 + mag * (w - 2), 22, fill=ON_COLOR if active else ACCENT, outline="")
+            c.create_rectangle(1, 4, 1 + mag * (w - 2), 22, fill=P["on"] if active else P["accent"], outline="")
             if b.source.kind == "axis":
                 tx = 1 + b.threshold * (w - 2)
-                c.create_line(tx, 0, tx, 26, fill="#dc2626", width=2)
+                c.create_line(tx, 0, tx, 26, fill=P["error"], width=2)
             self.preview_text.configure(text=("СРАБОТАЛО" if active else "не нажато") + f"  ({mag:.0%})",
-                                        foreground=ON_COLOR if active else OFF_COLOR)
+                                        foreground=P["on"] if active else P["off"])
 
     def _ok(self) -> None:
         b = self.build()
@@ -673,13 +677,17 @@ class App:
         root.title(title)
         root.minsize(980, 600)
         root.protocol("WM_DELETE_WINDOW", self.close)
-        self._style()
+        self._dark = False
+        self._theme_polls = 0
+        self._apply_theme()
         self._build()
+        self._retint()
         self._refresh_profiles()
         self._refresh_tree()
 
         service.set_toggle_key(cfg.settings.toggle_key)
         service.set_tick_rate(cfg.settings.tick_rate)
+        service.set_rumble(cfg.settings.rumble / 100)
         service.set_profile(cfg.active)
         if cfg.settings.start_enabled:
             service.set_enabled(True)
@@ -690,22 +698,40 @@ class App:
 
     # --- оформление ---
 
-    def _style(self) -> None:
+    def _apply_theme(self) -> None:
+        self._dark = theme.resolve(self.cfg.settings.theme)
+        theme.apply(self.root, self._dark)
+        # стили ttk живут внутри темы: после смены темы их нужно задать заново
         style = ttk.Style(self.root)
-        if "vista" in style.theme_names():
-            style.theme_use("vista")
         scale = self.root.winfo_fpixels("1i") / 96.0
         style.configure("Treeview", rowheight=int(24 * scale))
         style.configure("Status.TLabel", font=("Segoe UI", 11, "bold"))
         style.configure("Accent.TButton", font=("Segoe UI", 9, "bold"))
-        style.configure("Hint.TLabel", foreground=OFF_COLOR)
+        style.configure("Hint.TLabel", foreground=P["off"])
+
+    def _retint(self) -> None:
+        """Перекрасить то, чего не касаются стили ttk: tk-виджеты, теги таблицы, заголовок окна."""
+        theme.retint(self.root)
+        self.dot.configure(background=P["bg"])
+        self.tree.tag_configure("off", foreground=P["disabled"])
+        self.tree.tag_configure("live", background=P["live_bg"])
+        self.error_lbl.configure(foreground=P["error"])
+        self.monitor._last = None  # монитор перерисуется новыми цветами на следующем опросе
+        self._update_status()
+        theme.set_titlebar(self.root, self._dark)
+
+    def _set_theme(self, mode: str) -> None:
+        if mode != self.cfg.settings.theme:
+            self._commit(Config(self._settings(theme=mode), self.cfg.profiles), push=False)
+        self._apply_theme()
+        self._retint()
 
     def _build(self) -> None:
         root = self.root
 
         top = ttk.Frame(root, padding=(12, 10, 12, 4))
         top.pack(fill="x")
-        self.dot = tk.Canvas(top, width=16, height=16, highlightthickness=0, bg=root.cget("bg"))
+        self.dot = tk.Canvas(top, width=16, height=16, highlightthickness=0, bg=P["bg"])
         self.dot.pack(side="left")
         self.status = ttk.Label(top, text="", style="Status.TLabel")
         self.status.pack(side="left", padx=(6, 12))
@@ -759,8 +785,8 @@ class App:
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="left", fill="y")
-        self.tree.tag_configure("off", foreground="#9ca3af")
-        self.tree.tag_configure("live", background=LIVE_BG)
+        self.tree.tag_configure("off", foreground=P["disabled"])
+        self.tree.tag_configure("live", background=P["live_bg"])
         self.tree.bind("<Button-1>", self._tree_click)
         self.tree.bind("<Double-1>", self._tree_double)
         self.tree.bind("<Delete>", lambda _e: self._delete())
@@ -784,7 +810,7 @@ class App:
         ttk.Label(bar, text="Подсвечено голубым — то, что сейчас срабатывает", style="Hint.TLabel").pack(
             side="right")
 
-        bottom = ttk.Frame(root, padding=(12, 0, 12, 10))
+        bottom = ttk.Frame(root, padding=(12, 0, 12, 4))
         bottom.pack(fill="x")
         self.start_var = tk.BooleanVar(value=self.cfg.settings.start_enabled)
         ttk.Checkbutton(bottom, text="Включать маппинг сразу при запуске", variable=self.start_var,
@@ -796,13 +822,33 @@ class App:
         spin.bind("<FocusOut>", lambda _e: self._set_tick())
         spin.bind("<Return>", lambda _e: self._set_tick())
         spin.pack(side="left")
+        ttk.Label(bottom, text="Тема:").pack(side="left", padx=(18, 4))
+        self.theme_cb = Choice(bottom, theme.LABELS, self.cfg.settings.theme, self._set_theme, width=14)
+        self.theme_cb.pack(side="left")
         ttk.Button(bottom, text="Папка настроек", command=self._open_data_dir).pack(side="right")
         ttk.Button(bottom, text="Ярлык в «Пуск»", command=self._make_shortcut).pack(side="right", padx=(0, 6))
-        self.error_lbl = ttk.Label(bottom, text="", foreground="#dc2626")
+        self.error_lbl = ttk.Label(bottom, text="", foreground=P["error"])
         self.error_lbl.pack(side="right", padx=12)
-        self.pad_lbl = ttk.Label(bottom, text=f"Геймпад: {getattr(self.service, 'pad_status', 'не используется')}",
+
+        pad_row = ttk.Frame(root, padding=(12, 0, 12, 10))
+        pad_row.pack(fill="x")
+        self.pad_lbl = ttk.Label(pad_row, text=f"Геймпад: {getattr(self.service, 'pad_status', 'не используется')}",
                                  style="Hint.TLabel")
-        self.pad_lbl.pack(side="left", padx=(18, 0))
+        self.pad_lbl.pack(side="left")
+        ttk.Label(pad_row, text="Вибрация из игры на руль:").pack(side="left", padx=(18, 4))
+        # Метка создаётся раньше ползунка: Scale.set() сразу зовёт command.
+        self.rumble_pct = ttk.Label(pad_row, width=5, text=f"{self.cfg.settings.rumble}%")
+        self.rumble_scale = ttk.Scale(pad_row, from_=RUMBLE[0], to=RUMBLE[1], length=120,
+                                      command=self._rumble_move)
+        self.rumble_scale.set(self.cfg.settings.rumble)
+        for ev in ("<ButtonRelease-1>", "<KeyRelease>"):
+            self.rumble_scale.bind(ev, lambda _e: self._set_rumble())
+        self.rumble_scale.pack(side="left")
+        self.rumble_pct.pack(side="left", padx=(4, 0))
+        self.rumble_test_btn = ttk.Button(pad_row, text="Проверить", command=self.service.rumble_test)
+        self.rumble_test_btn.pack(side="left", padx=(4, 0))
+        self.rumble_lbl = ttk.Label(pad_row, text=getattr(self.service, "rumble_status", ""), style="Hint.TLabel")
+        self.rumble_lbl.pack(side="left", padx=(8, 0))
 
     # --- конфиг ---
 
@@ -1049,6 +1095,17 @@ class App:
             self.service.set_tick_rate(hz)
             self._commit(Config(self._settings(tick_rate=hz), self.cfg.profiles), push=False)
 
+    def _rumble_move(self, value) -> None:
+        pct = int(round(float(value)))
+        self.rumble_pct.configure(text=f"{pct}%")
+        self.service.set_rumble(pct / 100)
+
+    def _set_rumble(self) -> None:
+        pct = max(RUMBLE[0], min(RUMBLE[1], int(round(float(self.rumble_scale.get())))))
+        self._rumble_move(pct)
+        if pct != self.cfg.settings.rumble:
+            self._commit(Config(self._settings(rumble=pct), self.cfg.profiles), push=False)
+
     def _monitor_select(self, key: str) -> None:
         self._commit(Config(self._settings(monitor_device=key), self.cfg.profiles), push=False)
 
@@ -1080,6 +1137,8 @@ class App:
                     self._refresh_tree()
                 elif ev[0] == "pad_status":
                     self.pad_lbl.configure(text=f"Геймпад: {ev[1]}")
+                elif ev[0] == "rumble_status":
+                    self.rumble_lbl.configure(text=ev[1])
                 elif ev[0] == "error":
                     self._error = ev[1]
                     self.error_lbl.configure(text=f"Ошибка: {ev[1]}"[:120])
@@ -1091,6 +1150,13 @@ class App:
             self.monitor.update_view(states, infos)
             self._update_live(states, infos)
             self._update_status()
+            if self.cfg.settings.theme == "system":
+                self._theme_polls += 1
+                if self._theme_polls >= THEME_CHECK_POLLS:
+                    self._theme_polls = 0
+                    if theme.system_is_dark() != self._dark:  # в Windows переключили тему
+                        self._apply_theme()
+                        self._retint()
         except Exception:  # noqa: BLE001
             log.exception("ui poll failed")
         self.root.after(POLL_MS, self._poll)
@@ -1117,11 +1183,11 @@ class App:
         hk = self.cfg.settings.toggle_key
         suffix = f" ({keys.display(hk)})" if hk else ""
         if not self._infos:
-            text, color = "Руль не найден", OFF_COLOR
+            text, color = "Руль не найден", P["off"]
         elif self.service.enabled:
-            text, color = "Маппинг ВКЛЮЧЁН", ON_COLOR
+            text, color = "Маппинг ВКЛЮЧЁН", P["on"]
         else:
-            text, color = "Маппинг выключен", OFF_COLOR
+            text, color = "Маппинг выключен", P["off"]
         self.status.configure(text=text, foreground=color)
         self.dot.delete("all")
         self.dot.create_oval(2, 2, 14, 14, fill=color, outline="")

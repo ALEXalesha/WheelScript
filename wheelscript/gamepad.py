@@ -44,6 +44,23 @@ def report_values(state: PadState) -> tuple[int, int, int, int, int, int, int]:
             axis(state.lx), axis(state.ly), axis(state.rx), axis(state.ry))
 
 
+VIGEM_ERROR_NONE = 0x20000000
+
+
+def _user_index(pad) -> Optional[int]:
+    """Слот XInput (0…3), который Windows выдала виртуальному геймпаду, или None, пока не выдала."""
+    try:
+        import ctypes
+
+        from vgamepad.win import vigem_client
+        idx = ctypes.c_ulong()
+        # у VX360Gamepad нет геттеров для этих указателей — только приватные поля
+        err = vigem_client.vigem_target_x360_get_user_index(pad._busp, pad._devicep, ctypes.byref(idx))
+    except Exception:  # noqa: BLE001
+        return None
+    return idx.value if err == VIGEM_ERROR_NONE else None
+
+
 def explain(e: BaseException) -> str:
     text = str(e)
     if isinstance(e, ImportError):
@@ -60,15 +77,26 @@ class VirtualPad:
 
     RETRY = 5.0
 
-    def __init__(self, on_status: Callable[[str], None] = lambda s: None):
+    def __init__(self, on_status: Callable[[str], None] = lambda s: None,
+                 on_rumble: Callable[[int, int], None] = lambda large, small: None):
         self.on_status = on_status
+        self.on_rumble = on_rumble
         self.status = "не используется"
         self._pad = None
+        self._slot: Optional[int] = None
         self._next_try = 0.0
 
     @property
     def connected(self) -> bool:
         return self._pad is not None
+
+    @property
+    def slot(self) -> Optional[int]:
+        """Слот XInput нашего геймпада. Сервис прячет устройство с этим слотом из списка ввода:
+        иначе WheelScript читал бы собственный выход как вход (и оно даже стояло первым)."""
+        if self._slot is None and self._pad is not None:
+            self._slot = _user_index(self._pad)
+        return self._slot
 
     def _set_status(self, text: str) -> None:
         if text != self.status:
@@ -89,8 +117,22 @@ class VirtualPad:
         except Exception as e:  # noqa: BLE001 — vgamepad бросает голый Exception
             self._set_status(f"недоступен: {explain(e)}")
             return None
+        self._listen(self._pad)
         self._set_status("подключён (Xbox 360)")
         return self._pad
+
+    def _listen(self, pad) -> None:
+        """Вибрация, которую игра шлёт геймпаду. Колбэк зовётся из потока ViGEm;
+        имена параметров обязательны: vgamepad сверяет сигнатуру."""
+        def notification(client, target, large_motor, small_motor, led_number, user_data):
+            try:
+                self.on_rumble(large_motor, small_motor)
+            except Exception:  # noqa: BLE001 — исключение в ctypes-колбэке некуда пробросить
+                log.exception("rumble callback failed")
+        try:
+            pad.register_notification(notification)
+        except Exception:  # noqa: BLE001
+            log.exception("gamepad rumble notifications unavailable")
 
     def apply(self, state: PadState) -> None:
         pad = self._ensure()
@@ -104,12 +146,20 @@ class VirtualPad:
             pad.update()
         except Exception as e:  # noqa: BLE001
             self._pad = None
+            self._slot = None
+            self.on_rumble(0, 0)
             self._set_status(f"отключился: {explain(e)}")
 
     def close(self) -> None:
         pad, self._pad = self._pad, None
+        self._slot = None
         if pad is None:
             return
+        try:
+            pad.unregister_notification()
+        except Exception:  # noqa: BLE001
+            pass
+        self.on_rumble(0, 0)
         try:
             pad.reset()
             pad.update()

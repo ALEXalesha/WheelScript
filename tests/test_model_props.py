@@ -8,7 +8,7 @@ from hypothesis import strategies as st
 from wheelscript import keys
 from wheelscript.model import (ACTION_KINDS, AXIS_MODES, CURVE, DEADZONE, DIRECTIONS, HAT_DIRS, MAX_BINDINGS,
                                MAX_COMBO, MAX_NAME, MAX_PROFILES, MOUSE_BUTTONS, MOVE_SPEED, PAD_BUTTONS,
-                               PAD_STICKS, PAD_TRIGGERS, PRESS_MODES,
+                               PAD_STICKS, PAD_TRIGGERS, PRESS_MODES, RUMBLE, THEMES,
                                SOURCE_KINDS, THRESHOLD, TICK_RATE, WHEEL_SPEED, Action, Binding, Config,
                                InputSource, Profile, Settings, clean_text, default_config, default_profile,
                                gamepad_profile, unique_name)
@@ -67,6 +67,8 @@ def check_config(c: Config):
     assert c.settings.active_profile in names
     assert c.active.name == c.settings.active_profile
     assert TICK_RATE[0] <= c.settings.tick_rate <= TICK_RATE[1]
+    assert RUMBLE[0] <= c.settings.rumble <= RUMBLE[1] and isinstance(c.settings.rumble, int)
+    assert c.settings.theme in THEMES
     assert c.settings.toggle_key == "" or keys.is_key(c.settings.toggle_key)
     for p in c.profiles:
         check_text(p.name)
@@ -149,8 +151,19 @@ def test_clean_text(t):
 def test_numeric_fields_always_clamped(x):
     b = Binding.from_dict({"threshold": x, "deadzone": x, "curve": x, "action": {"kind": "mouse_move", "speed": x}})
     check_binding(b)
-    s = Settings.from_dict({"tick_rate": x})
+    s = Settings.from_dict({"tick_rate": x, "rumble": x})
     assert TICK_RATE[0] <= s.tick_rate <= TICK_RATE[1]
+    assert RUMBLE[0] <= s.rumble <= RUMBLE[1]
+
+
+@given(st.one_of(json_values, st.sampled_from(THEMES)))
+def test_theme_setting_is_canonical(x):
+    s = Settings.from_dict({"theme": x})
+    assert s.theme in THEMES
+    assert Settings.from_dict(s.to_dict()) == s
+    if isinstance(x, str) and x in THEMES:
+        assert s.theme == x
+    assert Settings.from_dict({}).theme == "system", "по умолчанию — как в системе"
 
 
 def test_huge_int_does_not_crash():
@@ -170,3 +183,4 @@ def test_old_config_without_pad_field_still_loads():
     """Конфиг из версии 2.0 (без поля pad) читается без потерь."""
     old = {"kind": "key", "keys": ["w"], "button": "left", "direction": "right", "speed": 1500.0, "press": "hold"}
     assert Action.from_dict(old) == Action.key(["w"])
+    assert Settings.from_dict({"toggle_key": "f8", "tick_rate": 125}).rumble == 100, "вибрация включена по умолчанию"

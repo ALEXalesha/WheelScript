@@ -37,6 +37,8 @@ CURVE = (0.2, 5.0)
 MOVE_SPEED = (0.0, 50000.0)
 WHEEL_SPEED = (0.0, 200.0)
 TICK_RATE = (20, 1000)
+RUMBLE = (0, 100)
+THEMES = ("system", "light", "dark")
 DEFAULT_MOVE_SPEED = 1500.0
 DEFAULT_WHEEL_SPEED = 10.0
 
@@ -274,24 +276,29 @@ class Settings:
     start_enabled: bool = False
     active_profile: str = ""
     monitor_device: str = ""
+    rumble: int = 100  # сила вибрации из игры на руле, %; 0 — выключено
+    theme: str = "system"
 
     @staticmethod
     def from_dict(d: Any) -> "Settings":
         if not isinstance(d, dict):
             return Settings()
         tk = d.get("toggle_key", "f8")
+        th = d.get("theme")
         return Settings(
             toggle_key=tk if (tk == "" or keymod.is_key(tk)) else "f8",
             tick_rate=_int(d.get("tick_rate"), 125, *TICK_RATE),
             start_enabled=_bool(d.get("start_enabled"), False),
             active_profile=clean_text(d.get("active_profile"), ""),
             monitor_device=clean_text(d.get("monitor_device"), "", MAX_DEVICE),
+            rumble=_int(d.get("rumble"), 100, *RUMBLE),
+            theme=th if isinstance(th, str) and th in THEMES else "system",
         )
 
     def to_dict(self) -> dict:
         return {"toggle_key": self.toggle_key, "tick_rate": self.tick_rate,
                 "start_enabled": self.start_enabled, "active_profile": self.active_profile,
-                "monitor_device": self.monitor_device}
+                "monitor_device": self.monitor_device, "rumble": self.rumble, "theme": self.theme}
 
 
 def unique_name(name: str, taken: set[str] | frozenset[str]) -> str:
