@@ -122,18 +122,27 @@ def name_of_vk(code: int) -> Optional[str]:
     return _VK_TO_NAME.get(code)
 
 
-def from_tk(keycode: int, keysym: str = "") -> Optional[str]:
-    """На Windows tkinter отдаёт в event.keycode виртуальный код клавиши."""
-    right = keysym.endswith("_R")
-    if keycode == 0x10:
-        return "rshift" if right else "shift"
-    if keycode == 0x11:
-        return "rctrl" if right else "ctrl"
-    if keycode == 0x12:
-        return "ralt" if right else "alt"
-    if keycode in (0xA0, 0xA2, 0xA4):
-        return {0xA0: "shift", 0xA2: "ctrl", 0xA4: "alt"}[keycode]
-    return name_of_vk(keycode)
+# Qt кладёт флаг «расширенная клавиша» (бит 24 lParam сообщения Windows) в nativeModifiers().
+_QT_EXTENDED = 0x01000000
+
+
+def is_extended(native_modifiers: int) -> bool:
+    return bool(native_modifiers & _QT_EXTENDED)
+
+
+def from_native(vk: int, scan: int = 0, extended: bool = False) -> Optional[str]:
+    """Имя клавиши по данным нажатия из Qt: виртуальный код, скан-код, флаг extended.
+
+    Для Shift, Ctrl и Alt Windows присылает общий код (0x10/0x11/0x12); правую клавишу
+    отличает скан-код (правый Shift — 0x36) или флаг extended (правые Ctrl и Alt).
+    """
+    if vk in (0x10, 0xA0, 0xA1):
+        return "rshift" if vk == 0xA1 or scan == 0x36 else "shift"
+    if vk in (0x11, 0xA2, 0xA3):
+        return "rctrl" if vk == 0xA3 or (vk == 0x11 and extended) else "ctrl"
+    if vk in (0x12, 0xA4, 0xA5):
+        return "ralt" if vk == 0xA5 or (vk == 0x12 and extended) else "alt"
+    return name_of_vk(vk)
 
 
 def display(name: str) -> str:

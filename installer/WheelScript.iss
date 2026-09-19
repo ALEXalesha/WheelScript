@@ -40,6 +40,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; 3.0 перешла с Tk на Qt: старые библиотеки 2.x из _internal убираем, чтобы не копились.
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Icons]
 ; Ярлык в «Пуск» — по нему программа находится через поиск Windows.
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\WheelScript.exe"; Comment: "Руль как мышь и клавиатура"

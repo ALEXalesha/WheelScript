@@ -52,17 +52,17 @@ def test_normalize_combo(names):
     assert mods == sorted(mods, reverse=True), "модификаторы идут первыми"
 
 
-@given(st.integers(-10, 70000), st.text(max_size=10))
-def test_from_tk_never_crashes(code, keysym):
-    name = keys.from_tk(code, keysym)
+@given(st.integers(-10, 70000), st.integers(-5, 0x200), st.booleans())
+def test_from_native_never_crashes(code, scan, ext):
+    name = keys.from_native(code, scan, ext)
     assert name is None or keys.is_key(name)
 
 
-def test_from_tk_sides():
-    assert keys.from_tk(0x10, "Shift_L") == "shift"
-    assert keys.from_tk(0x10, "Shift_R") == "rshift"
-    assert keys.from_tk(0x11, "Control_R") == "rctrl"
-    assert keys.from_tk(0x57, "w") == "w"
+def test_from_native_sides():
+    assert keys.from_native(0x10, 0x2A) == "shift"
+    assert keys.from_native(0x10, 0x36) == "rshift"
+    assert keys.from_native(0x11, 0x1D, True) == "rctrl"
+    assert keys.from_native(0x57, 0x11) == "w"
 
 
 def test_struct_sizes_match_winapi():

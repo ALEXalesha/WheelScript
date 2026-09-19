@@ -7,24 +7,46 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 $root = $PSScriptRoot
 
-$version = (python -c "import wheelscript; print(wheelscript.__version__)").Trim()
+# Everything runs in the project's own .venv, never in the global Python.
+$py = "$root\.venv\Scripts\python.exe"
+if (-not (Test-Path $py)) {
+    Write-Host "Creating .venv" -ForegroundColor Cyan
+    py -3 -m venv "$root\.venv"
+    if ($LASTEXITCODE) { python -m venv "$root\.venv" }
+    if ($LASTEXITCODE) { throw "venv failed" }
+}
+& $py -m pip install --disable-pip-version-check -q -r "$root\requirements-dev.txt"
+if ($LASTEXITCODE) { throw "pip install failed" }
+
+$version = (& $py -c "import wheelscript; print(wheelscript.__version__)").Trim()
 Write-Host "WheelScript $version" -ForegroundColor Cyan
 
 if (-not $SkipTests) {
-    python -m pytest
+    & $py -m pytest -p no:cacheprovider
     if ($LASTEXITCODE) { throw "Tests failed" }
 }
 
-if (-not (Test-Path "$root\assets\icon.ico")) { python tools\make_icon.py }
+if (-not (Test-Path "$root\assets\icon.ico")) { & $py tools\make_icon.py }
 
-python -m PyInstaller --noconfirm --clean --windowed --name WheelScript `
+& $py -m PyInstaller --noconfirm --clean --windowed --name WheelScript `
     --icon "$root\assets\icon.ico" `
     --add-data "$root\assets\icon.ico;assets" `
     --collect-all vgamepad `
     --exclude-module numpy --exclude-module hypothesis --exclude-module pytest `
+    --exclude-module tkinter --exclude-module _tkinter `
+    --exclude-module PySide6.QtNetwork --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick `
+    --exclude-module PySide6.QtSql --exclude-module PySide6.QtOpenGL --exclude-module PySide6.QtPdf `
+    --exclude-module PySide6.QtSvg --exclude-module PySide6.QtDBus `
     --distpath "$root\dist" --workpath "$root\build\pyi" --specpath "$root\build" `
     "$root\run.py"
 if ($LASTEXITCODE) { throw "PyInstaller failed" }
+
+# Software OpenGL fallback is never used by Qt Widgets; keep only Russian Qt texts.
+$qt = "$root\dist\WheelScript\_internal\PySide6"
+Remove-Item -Force -ErrorAction SilentlyContinue "$qt\opengl32sw.dll"
+if (Test-Path "$qt\translations") {
+    Get-ChildItem "$qt\translations" -File | Where-Object { $_.Name -notlike "qtbase_ru*.qm" } | Remove-Item -Force
+}
 
 New-Item -ItemType Directory -Force "$root\release" | Out-Null
 

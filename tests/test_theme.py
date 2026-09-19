@@ -11,11 +11,11 @@ HEX = re.compile(r"^#[0-9a-f]{6}$")
 
 # (цвет текста, цвет фона, минимальный контраст по WCAG)
 PAIRS = [
-    ("fg", "bg", 7.0), ("entry_fg", "entry_bg", 7.0), ("text", "surface", 7.0), ("text", "surface2", 4.5),
-    ("off", "bg", 4.5), ("select_fg", "select_bg", 4.5), ("entry_fg", "wait_bg", 4.5),
-    ("fg", "live_bg", 4.5), ("on", "bg", 3.0), ("error", "bg", 3.0), ("faint", "surface", 3.0),
+    ("fg", "bg", 7.0), ("text", "surface", 7.0), ("text", "surface2", 4.5),
+    ("off", "bg", 4.5), ("entry_fg", "wait_bg", 4.5), ("fg", "live_bg", 4.5),
+    ("on", "bg", 3.0), ("error", "bg", 3.0), ("faint", "surface", 3.0),
     ("faint", "surface2", 3.0),  # «ещё не двигалась» рисуется поверх полоски оси
-    ("fg", "button_bg", 4.5),
+    ("disabled", "surface", 3.0),  # выключенные привязки в таблице
 ]
 
 
@@ -37,8 +37,9 @@ def test_palettes_have_same_keys():
     assert theme.DARK["dark"] is True and theme.LIGHT["dark"] is False
 
 
-def test_dark_palette_is_all_hex():
-    for k, v in theme.DARK.items():
+@pytest.mark.parametrize("pal", [theme.LIGHT, theme.DARK], ids=["light", "dark"])
+def test_palette_is_all_hex(pal):
+    for k, v in pal.items():
         if k != "dark":
             assert HEX.match(v), f"{k}={v!r}"
 
@@ -46,8 +47,6 @@ def test_dark_palette_is_all_hex():
 @pytest.mark.parametrize("pal", [theme.LIGHT, theme.DARK], ids=["light", "dark"])
 @pytest.mark.parametrize("fg,bg,minimum", PAIRS)
 def test_text_is_readable(pal, fg, bg, minimum):
-    if not (HEX.match(pal[fg]) and HEX.match(pal[bg])):
-        pytest.skip("системный цвет Windows")
     assert contrast(pal[fg], pal[bg]) >= minimum, f"{fg} на {bg}: {contrast(pal[fg], pal[bg]):.2f}"
 
 
@@ -55,12 +54,27 @@ def test_labels_cover_all_modes():
     assert set(theme.LABELS) == set(THEMES)
 
 
-def test_resolve(monkeypatch):
-    monkeypatch.setattr(theme, "system_is_dark", lambda: True)
-    assert theme.resolve("dark") and theme.resolve("system") and not theme.resolve("light")
-    monkeypatch.setattr(theme, "system_is_dark", lambda: False)
-    assert not theme.resolve("system") and theme.resolve("dark")
+@pytest.mark.parametrize("mode, dark", [("dark", True), ("light", False), ("dark", True)])
+def test_apply_switches_qt_and_palette(qapp, mode, dark):
+    try:
+        assert theme.apply(qapp, mode) is dark
+        assert theme.P == (theme.DARK if dark else theme.LIGHT)
+        assert theme.is_dark(qapp.palette()) is dark
+    finally:
+        theme.apply(qapp, "light")
 
 
-def test_system_is_dark_is_bool():
-    assert isinstance(theme.system_is_dark(), bool)
+def test_system_mode_follows_qt(qapp):
+    from PySide6.QtCore import Qt
+    try:
+        theme.apply(qapp, "system")
+        assert qapp.styleHints().colorScheme() in (Qt.ColorScheme.Light, Qt.ColorScheme.Dark)
+        assert theme.P["dark"] == theme.is_dark(qapp.palette())
+    finally:
+        theme.apply(qapp, "light")
+
+
+@pytest.mark.parametrize("mode", ["x", "", None, "Dark"])
+def test_unknown_mode_is_system(mode):
+    from PySide6.QtCore import Qt
+    assert theme.color_scheme(mode) == Qt.ColorScheme.Unknown

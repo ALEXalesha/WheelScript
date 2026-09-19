@@ -2,4 +2,5 @@
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-q"
+qt_api = "pyside6"
 filterwarnings = ["ignore::UserWarning:pygame.*", "ignore::DeprecationWarning"]

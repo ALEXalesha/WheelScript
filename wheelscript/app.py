@@ -5,9 +5,7 @@ from __future__ import annotations
 import ctypes
 import logging
 import sys
-import tkinter as tk
 from logging.handlers import RotatingFileHandler
-from tkinter import messagebox
 
 from . import APP_NAME, __version__, storage
 
@@ -30,13 +28,6 @@ def _setup_logging() -> None:
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
-def _dpi_aware() -> None:
-    try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
-    except (AttributeError, OSError):
-        pass
-
-
 def _single_instance() -> bool:
     """Два экземпляра слали бы ввод дважды — второй не запускаем."""
     global _mutex
@@ -50,18 +41,46 @@ def _single_instance() -> bool:
     return ctypes.get_last_error() != 183  # ERROR_ALREADY_EXISTS
 
 
+UI_FONT_SIZE = 10
+STYLE = "windows11"  # на Windows 10 Qt сам возьмёт windowsvista
+_translators: list = []  # Qt хранит только указатель — держим объект живым
+
+
+def create_app():
+    """QApplication со стилем Windows 11, шрифтом, иконкой и русскими текстами Qt."""
+    from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
+    from PySide6.QtGui import QFont, QIcon
+    from PySide6.QtWidgets import QApplication, QStyleFactory
+
+    app = QApplication.instance() or QApplication(sys.argv[:1])
+    app.setApplicationName(APP_NAME)
+    if STYLE in [k.lower() for k in QStyleFactory.keys()]:
+        app.setStyle(STYLE)
+    font = QFont(app.font())
+    font.setPointSize(UI_FONT_SIZE)
+    app.setFont(font)
+    icon = storage.resource_path("assets/icon.ico")
+    if icon.is_file():
+        app.setWindowIcon(QIcon(str(icon)))
+    if not _translators:
+        tr = QTranslator(app)
+        # стандартные кнопки («Да», «Отмена») и окна выбора файла — из каталога самого Qt
+        if tr.load(QLocale(QLocale.Russian), "qtbase", "_", QLibraryInfo.path(QLibraryInfo.TranslationsPath)):
+            app.installTranslator(tr)
+            _translators.append(tr)
+    return app
+
+
 def main() -> None:
     _setup_logging()
     log.info("%s %s starting (portable=%s)", APP_NAME, __version__, storage.is_portable())
-    _dpi_aware()
+    app = create_app()
+    from PySide6.QtWidgets import QMessageBox
     if not _single_instance():
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showinfo(APP_NAME, f"{APP_NAME} уже запущен.")
-        root.destroy()
+        QMessageBox.information(None, APP_NAME, f"{APP_NAME} уже запущен.")
         return
 
-    from .gui import App
+    from .qt.main_window import MainWindow
     from .service import InputService
 
     cfg, warning = storage.load_config()
@@ -73,20 +92,16 @@ def main() -> None:
 
     service = InputService(cfg.settings.tick_rate)
     service.start()
-    root = tk.Tk()
-    try:
-        root.iconbitmap(default=str(storage.resource_path("assets/icon.ico")))
-    except tk.TclError:
-        pass
 
     def report(exc, val, tb):
         log.error("UI error", exc_info=(exc, val, tb))
-        messagebox.showerror(APP_NAME, f"Ошибка: {val}", parent=root)
+        QMessageBox.critical(None, APP_NAME, f"Ошибка: {val}")
 
-    root.report_callback_exception = report
-    App(root, service, cfg, path, warning)
+    sys.excepthook = report
+    window = MainWindow(service, cfg, path, warning)
+    window.show()
     try:
-        root.mainloop()
+        app.exec()
     finally:
         service.stop()
         log.info("stopped")
