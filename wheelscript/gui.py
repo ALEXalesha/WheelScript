@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import logging
 import os
 import queue
@@ -57,6 +58,141 @@ class Choice(ttk.Combobox):
 
     def set_key(self, key: str) -> None:
         self.current(self._keys.index(key) if key in self._keys else 0)
+
+
+def _app_is_foreground() -> bool:
+    try:
+        u = ctypes.windll.user32
+        pid = ctypes.c_ulong()
+        u.GetWindowThreadProcessId(u.GetForegroundWindow(), ctypes.byref(pid))
+        return pid.value == os.getpid()
+    except Exception:  # noqa: BLE001
+        return True
+
+
+class DropMenu:
+    """Выпадающее меню у кнопки. В светлой теме — обычное меню Windows. В тёмной — своё окошко:
+    пункты меню Tk рисует сам, а толстую светлую рамку вокруг них Windows рисует старым
+    системным стилем, и поменять её цвет или толщину нельзя."""
+
+    def __init__(self, button: ttk.Button):
+        self.button = button
+        self.items: list[Optional[tuple[str, Callable[[], None]]]] = []  # None — разделитель
+        self.native = tk.Menu(button, tearoff=False)
+        self.popup: Optional[tk.Toplevel] = None
+        self._rows: list[tuple[tk.Label, int]] = []
+        self._active = -1
+        self._job: Optional[str] = None
+        button.configure(command=self.open)
+
+    def add_command(self, label: str, command: Callable[[], None]) -> None:
+        self.items.append((label, command))
+        self.native.add_command(label=label, command=command)
+
+    def add_separator(self) -> None:
+        self.items.append(None)
+        self.native.add_separator()
+
+    # то же, что у tk.Menu, — для скриптов проверки
+    def index(self, what) -> int:
+        return len(self.items) - 1 if what == "end" else int(what)
+
+    def type(self, i: int) -> str:
+        return "separator" if self.items[i] is None else "command"
+
+    def entrycget(self, i: int, _option: str) -> str:
+        item = self.items[i]
+        return item[0] if item else ""
+
+    def invoke(self, i: int) -> None:
+        item = self.items[i]
+        if item:
+            item[1]()
+
+    def open(self) -> None:
+        b = self.button
+        x, y = b.winfo_rootx(), b.winfo_rooty() + b.winfo_height()
+        if P["dark"]:
+            self._open_popup(x, y)
+        else:
+            self.native.tk_popup(x, y)
+
+    def _open_popup(self, x: int, y: int) -> None:
+        self.close()
+        top = self.popup = tk.Toplevel(self.button)
+        top.withdraw()
+        top.overrideredirect(True)
+        top.attributes("-topmost", True)
+        box = tk.Frame(top, bd=0, bg=P["menu_bg"], highlightthickness=1,
+                       highlightbackground=P["border"], highlightcolor=P["border"])
+        box.pack(fill="both", expand=True)
+        self._rows, self._active = [], -1
+        for i, item in enumerate(self.items):
+            if item is None:
+                tk.Frame(box, height=1, bg=P["border"]).pack(fill="x", padx=8, pady=4)
+                continue
+            row = tk.Label(box, text=item[0], anchor="w", font="TkMenuFont", padx=16, pady=4,
+                           bg=P["menu_bg"], fg=P["menu_fg"])
+            row.pack(fill="x")
+            n = len(self._rows)
+            row.bind("<Enter>", lambda _e, n=n: self._highlight(n))
+            row.bind("<ButtonRelease-1>", lambda _e, i=i: self._choose(i))
+            self._rows.append((row, i))
+        top.bind("<Escape>", lambda _e: self.close())
+        top.bind("<Up>", lambda _e: self._highlight(self._active - 1))
+        top.bind("<Down>", lambda _e: self._highlight(self._active + 1))
+        top.bind("<Return>", lambda _e: self._choose(self._rows[self._active][1]) if self._active >= 0 else None)
+        top.bind("<ButtonPress-1>", self._press)
+        top.update_idletasks()
+        h = top.winfo_reqheight()
+        if y + h > self.button.winfo_screenheight():  # внизу не влезает — открываем вверх
+            y = self.button.winfo_rooty() - h
+        top.geometry(f"+{x}+{max(0, y)}")
+        top.deiconify()
+        top.grab_set()
+        top.focus_force()
+        self._job = self.button.after(150, self._watch)
+
+    def _highlight(self, n: int) -> None:
+        if not self._rows:
+            return
+        self._active = n % len(self._rows)
+        for k, (row, _i) in enumerate(self._rows):
+            on = k == self._active
+            row.configure(bg=P["select_bg"] if on else P["menu_bg"], fg=P["select_fg"] if on else P["menu_fg"])
+
+    def _press(self, e) -> None:
+        # из-за захвата (grab) щелчки по остальному окну приходят сюда: щелчок мимо меню закрывает его
+        t = self.popup
+        if t is not None and not (0 <= e.x_root - t.winfo_rootx() < t.winfo_width()
+                                  and 0 <= e.y_root - t.winfo_rooty() < t.winfo_height()):
+            self.close()
+
+    def _watch(self) -> None:
+        # щелчок по другой программе захват не ловит — закрываемся, когда окно WheelScript уже не в фокусе
+        self._job = None
+        if self.popup is None:
+            return
+        if not _app_is_foreground():
+            self.close()
+            return
+        self._job = self.button.after(150, self._watch)
+
+    def _choose(self, i: int) -> None:
+        self.close()
+        self.invoke(i)
+
+    def close(self) -> None:
+        if self._job:
+            self.button.after_cancel(self._job)
+            self._job = None
+        top, self.popup = self.popup, None
+        if top is not None:
+            try:
+                top.grab_release()
+            except tk.TclError:
+                pass
+            top.destroy()
 
 
 class InputField(ttk.Frame):
@@ -751,8 +887,8 @@ class App:
         self.profile_cb = ttk.Combobox(prof, state="readonly", width=36)
         self.profile_cb.pack(side="left", padx=6)
         self.profile_cb.bind("<<ComboboxSelected>>", self._select_profile)
-        mb = ttk.Menubutton(prof, text="Действия с профилем")
-        menu = tk.Menu(mb, tearoff=False)
+        mb = ttk.Button(prof, text="Действия с профилем ▾")
+        menu = self.profile_menu = DropMenu(mb)
         menu.add_command(label="Новый пустой профиль…", command=self._profile_new)
         menu.add_command(label="Новый стандартный (PXN V9: руль как мышь)…", command=self._profile_new_default)
         menu.add_command(label="Новый: руль как геймпад Xbox…", command=self._profile_new_gamepad)
@@ -762,7 +898,6 @@ class App:
         menu.add_separator()
         menu.add_command(label="Импорт из файла…", command=self._profile_import)
         menu.add_command(label="Экспорт в файл…", command=self._profile_export)
-        mb["menu"] = menu
         mb.pack(side="left")
 
         paned = ttk.PanedWindow(root, orient="horizontal")
@@ -794,15 +929,14 @@ class App:
 
         bar = ttk.Frame(left, padding=(0, 8, 0, 0))
         bar.pack(fill="x")
-        add = ttk.Menubutton(bar, text="＋ Добавить")
-        amenu = tk.Menu(add, tearoff=False)
+        add = ttk.Button(bar, text="＋ Добавить ▾")
+        amenu = self.add_menu = DropMenu(add)
         for preset in PRESETS:
             if preset is None:
                 amenu.add_separator()
             else:
                 label, factory = preset
                 amenu.add_command(label=label, command=lambda f=factory: self._add(f()))
-        add["menu"] = amenu
         add.pack(side="left")
         for text, cmd in (("Изменить", self._edit), ("Копия", self._duplicate), ("Удалить", self._delete),
                           ("▲", lambda: self._move(-1)), ("▼", lambda: self._move(1))):
@@ -902,8 +1036,9 @@ class App:
         return int(sel[0]) if sel else None
 
     def _tree_click(self, e):
-        if self.tree.identify_region(e.x, e.y) == "cell" and self.tree.identify_column(e.x) == "#1":
-            iid = self.tree.identify_row(e.y)
+        region = self.tree.identify_region(e.x, e.y)
+        iid = self.tree.identify_row(e.y)
+        if region == "cell" and self.tree.identify_column(e.x) == "#1":
             if iid:
                 bindings = list(self.profile.bindings)
                 i = int(iid)
@@ -911,13 +1046,20 @@ class App:
                 bindings[i] = Binding.from_dict(b.to_dict() | {"enabled": not b.enabled})
                 self._set_bindings(bindings, i)
                 return "break"
+        if region == "nothing" or (iid and iid in self.tree.selection()):
+            # повторный клик по выделенной строке (или по пустому месту) снимает выделение
+            self.tree.selection_remove(*self.tree.selection())
+            return "break"
         return None
 
     def _tree_double(self, e):
         # Второй быстрый клик Tk присылает как <Double-1>, а не <Button-1> — иначе он терялся.
         if self.tree.identify_column(e.x) == "#1":
             return self._tree_click(e)
-        if self.tree.identify_row(e.y):
+        iid = self.tree.identify_row(e.y)
+        if iid:
+            # первый клик двойного мог снять выделение — выделяем строку под курсором заново
+            self.tree.selection_set(iid)
             self._edit()
         return "break"
 

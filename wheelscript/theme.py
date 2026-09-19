@@ -104,7 +104,9 @@ def _configure_dark(s: ttk.Style, p: dict) -> None:
                  arrowcolor=p["fg"], insertcolor=p["entry_fg"])
     for name in ("TEntry", "TCombobox", "TSpinbox"):
         s.configure(name, **field)
+        # без background в map у clam кнопка-стрелка при нажатии становится почти белой
         s.map(name, fieldbackground=[("readonly", p["entry_bg"]), ("disabled", p["bg"])],
+              background=[("pressed", p["button_pressed"]), ("active", p["button_active"])],
               foreground=[("readonly", p["entry_fg"])], bordercolor=[("focus", p["accent"])],
               selectbackground=[("readonly", p["entry_bg"])], selectforeground=[("readonly", p["entry_fg"])])
     for name in ("TCheckbutton", "TRadiobutton"):
@@ -128,6 +130,8 @@ def _configure_dark(s: ttk.Style, p: dict) -> None:
     s.configure("TLabelframe.Label", background=p["bg"], foreground=p["fg"])
     s.configure("TPanedwindow", background=p["bg"])
     s.configure("Sash", background=p["bg"], lightcolor=p["border"], bordercolor=p["border"])
+    s.configure("ComboboxPopdownFrame", background=p["entry_bg"], bordercolor=p["border"],
+                lightcolor=p["border"], darkcolor=p["border"], relief="solid", borderwidth=1)
 
 
 def _options(root: tk.Misc, p: dict) -> None:

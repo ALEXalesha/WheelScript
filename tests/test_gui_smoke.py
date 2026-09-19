@@ -193,3 +193,82 @@ def test_dialog_follows_dark_theme(app):
     app._add(Binding.make("t", InputSource(), Action.key(["e"])))
     assert seen == {"bg": theme.DARK["bg"], "preview": theme.DARK["surface"], "entry": theme.DARK["entry_bg"]}
     app._set_theme("light")
+
+
+def _cell_event(app, iid, col):
+    class Ev:
+        pass
+    app.root.deiconify()
+    app.root.update()
+    x, y, w, h = app.tree.bbox(iid, col)
+    ev = Ev()
+    ev.x, ev.y = x + w // 2, y + h // 2
+    return ev
+
+
+def test_click_on_selected_row_deselects(app):
+    app.tree.selection_set("1")
+    assert app._tree_click(_cell_event(app, "1", "#2")) == "break"
+    assert app.tree.selection() == (), "повторный клик по выделенной строке снимает выделение"
+    app.tree.selection_set("2")
+    assert app._tree_click(_cell_event(app, "1", "#2")) is None, "клик по другой строке выделяет её (это делает Tk)"
+    assert app.tree.selection() == ("2",)
+
+
+def test_click_on_empty_area_deselects(app):
+    app._set_bindings(list(app.profile.bindings[:1]))
+    app.root.geometry("1000x700")
+    app.root.update()
+
+    class Ev:
+        pass
+    ev = Ev()
+    ev.x, ev.y = 60, app.tree.winfo_height() - 6
+    if app.tree.identify_region(ev.x, ev.y) != "nothing":
+        pytest.skip("под строками нет пустого места")
+    app.tree.selection_set("0")
+    assert app._tree_click(ev) == "break" and app.tree.selection() == ()
+
+
+def test_dark_dropdown_has_thin_border_and_works(app):
+    """В тёмной теме меню кнопок — своё окошко с рамкой 1 px (у меню Windows рамка толстая и светлая)."""
+    from wheelscript import theme
+    app._set_theme("dark")
+    for m in (app.profile_menu, app.add_menu):
+        labels_ = [m.entrycget(i, "label") for i in range(m.index("end") + 1)]
+        native = [m.native.entrycget(i, "label") if m.native.type(i) == "command" else ""
+                  for i in range(m.native.index("end") + 1)]
+        assert labels_ == native, "пункты те же, что у обычного меню Windows"
+    m = app.profile_menu
+    called = []
+    m.items[0] = (m.items[0][0], lambda: called.append("new"))
+    m.open()
+    top = m.popup
+    assert top is not None and top.overrideredirect()
+    box = top.winfo_children()[0]
+    assert int(box.cget("highlightthickness")) == 1
+    assert str(box.cget("highlightbackground")) == theme.DARK["border"]
+    assert str(box.cget("bg")) == theme.DARK["menu_bg"]
+    m._highlight(0)
+    assert str(m._rows[0][0].cget("bg")) == theme.DARK["select_bg"]
+    m._choose(m._rows[m._active][1])
+    assert called == ["new"] and m.popup is None, "выбор пункта выполняет команду и закрывает меню"
+
+    m.open()
+
+    class Ev:
+        x_root = y_root = -5000
+    m._press(Ev())
+    assert m.popup is None, "щелчок мимо меню закрывает его"
+    app._set_theme("light")
+
+
+def test_double_click_on_selected_row_still_edits(app):
+    """Первый клик двойного снимает выделение, но редактор всё равно должен открыться."""
+    seen = []
+    app._edit = lambda: seen.append(app._selected())
+    app.tree.selection_set("0")
+    ev = _cell_event(app, "0", "#2")
+    app._tree_click(ev)   # первый клик: выделение снято
+    app._tree_double(ev)  # второй приходит как <Double-1>
+    assert seen == [0]
