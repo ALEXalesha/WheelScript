@@ -38,14 +38,39 @@ def _target() -> tuple[str, str, str, str]:
     return exe, f'"{root / "run.py"}"', str(root), str(storage.resource_path("assets/icon.ico"))
 
 
+def _console_text(raw: bytes) -> str:
+    """Windows PowerShell пишет stderr в кодировке консоли, а не в UTF-8.
+
+    На русской Windows это cp866, и русское сообщение об ошибке, прочитанное как
+    UTF-8, превращается в кашу - то есть причина, ради которой stderr и ловится,
+    до человека не доходит.
+    """
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            return raw.decode(f"cp{ctypes.windll.kernel32.GetOEMCP()}")
+        except (LookupError, UnicodeDecodeError, OSError, AttributeError):
+            pass
+    return raw.decode("utf-8", "replace")
+
+
 def create(path: Optional[Path] = None) -> Path:
     path = path or shortcut_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     exe, args, workdir, icon = _target()
     env = os.environ | {"WS_LNK": str(path), "WS_TARGET": exe, "WS_ARGS": args, "WS_DIR": workdir,
                         "WS_ICON": icon, "WS_DESC": DESCRIPTION}
-    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", _PS], env=env, check=True,
-                   capture_output=True, timeout=30, creationflags=CREATE_NO_WINDOW)
-    if not path.exists():
-        raise OSError(f"ярлык не создан: {path}")
+    # check=True дал бы голый CalledProcessError без единого слова о причине: сам
+    # текст ошибки PowerShell при этом уже пойман в stderr и молча выброшен. А
+    # причина бывает внешняя - отключённый Windows Script Host, права на папку, -
+    # и человеку в окне показывают именно её.
+    done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", _PS], env=env,
+                          capture_output=True, timeout=30, creationflags=CREATE_NO_WINDOW)
+    if done.returncode or not path.exists():
+        why = _console_text(done.stderr or b"").strip() or f"код {done.returncode}"
+        raise OSError(f"ярлык не создан: {path}\n{why}")
     return path
