@@ -1,4 +1,18 @@
+<div align="center">
+
 # WheelScript
+
+**Превращает игровой руль в мышь и клавиатуру - или в виртуальный геймпад Xbox. Для игр, которые руль не понимают: поворот крутит камеру, педали жмут клавиши, кнопки и коробка передач делают что угодно.**
+
+[Скачать для Windows](https://github.com/ALEXalesha/WheelScript/releases/latest) &nbsp;·&nbsp; [English version of this file](README.md)
+
+[![CI](https://github.com/ALEXalesha/WheelScript/actions/workflows/ci.yml/badge.svg)](https://github.com/ALEXalesha/WheelScript/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ALEXalesha/WheelScript?color=16a34a)](https://github.com/ALEXalesha/WheelScript/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+<img src="docs/screenshots/window-dark.png" width="900" alt="Окно WheelScript">
+
+</div>
 
 Превращает игровой руль в мышь и клавиатуру — или в виртуальный геймпад Xbox.
 Нужен для игр, которые не понимают руль: поворот руля крутит камеру, педали
@@ -305,3 +319,13 @@ build.ps1       сборка exe, portable и установщика
 До версии 3.0 интерфейс был на tkinter. Его заменили на Qt: Tk на Windows
 заметно тормозил при изменении размера окна, а тёмную тему приходилось
 собирать вручную. Подробности — в `docs/2026-09-19-qt-port-design.md`.
+
+## Скриншоты собираются программой
+
+`tools/make_screenshots.py` открывает настоящее окно и настоящий редактор привязки и снимает их через `QWidget.grab()` - в светлой и в тёмной теме. Съёмка экрана не годится: окно может оказаться позади других, и в кадр попадёт чужое содержимое.
+
+Подставлен на снимках только руль: к машине сборки он не подключён, а без устройства окно честно пишет «Руль не найден» - и в кадре не было бы видно ничего из того, ради чего программу открывают. Заглушка отвечает как PXN V9 Gen 2 в покое: оси в нуле, кнопки отпущены, живых подсветок в кадре нет. Настройки при этом уводятся во временную папку, так что настоящий `%APPDATA%\WheelScript` не меняется.
+
+## Лицензия
+
+MIT, файл [LICENSE](LICENSE).
