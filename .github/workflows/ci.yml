@@ -26,8 +26,18 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
-      - name: Зависимости
-        run: pip install -r requirements-dev.txt
+      # vgamepad при установке запускает MSI-установщик драйвера ViGEmBus и ждёт
+      # ответа - на раннере это повисло намертво до таймаута в 30 минут (в логе
+      # остался осиротевший msiexec). Проверкам пакет не нужен вовсе: там, где он
+      # важен, тесты подставляют его сами модулем-заглушкой. Версии остальных
+      # зависимостей берём из тех же файлов, чтобы не заводить им вторую копию.
+      - name: Зависимости без vgamepad
+        run: |
+          Get-Content requirements.txt, requirements-dev.txt |
+            Where-Object { $_ -notmatch '^(vgamepad|-r )' } |
+            Set-Content ci-requirements.txt
+          Get-Content ci-requirements.txt
+          pip install -r ci-requirements.txt
 
       - name: 195 проверок
         run: python -m pytest -q
