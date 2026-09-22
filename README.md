@@ -61,7 +61,7 @@ python -m venv .venv
 .venv\Scripts\python -m pytest
 ```
 
-195 tests, about 85 seconds. The engine, the model, input recognition, the SendInput packing and the gamepad report are checked by property tests on [hypothesis](https://hypothesis.readthedocs.io/): it invents thousands of random profiles, wheel states and sequences of actions, and checks invariants rather than examples.
+196 tests, about 85 seconds. The engine, the model, input recognition, the SendInput packing and the gamepad report are checked by property tests on [hypothesis](https://hypothesis.readthedocs.io/): it invents thousands of random profiles, wheel states and sequences of actions, and checks invariants rather than examples.
 
 The invariants are the interesting part, because they are what a mapper can actually get wrong:
 
