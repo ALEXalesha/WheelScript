@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 import subprocess
 import sys
@@ -15,9 +16,61 @@ DESCRIPTION = "Руль как мышь и клавиатура"
 
 # Пути передаются через переменные окружения, а не подставляются в текст команды:
 # так кавычки и спецсимволы в пути к папке не сломают (и не «выполнят») скрипт.
-_PS = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:WS_LNK);"
-       "$s.TargetPath=$env:WS_TARGET;$s.Arguments=$env:WS_ARGS;$s.WorkingDirectory=$env:WS_DIR;"
-       "$s.IconLocation=$env:WS_ICON;$s.Description=$env:WS_DESC;$s.Save()")
+#
+# Ярлык пишется через IShellLinkW + IPersistFile, а не через WScript.Shell: тот
+# сохраняет .lnk через ANSI и на буквах не из кодовой страницы системы (кириллица на
+# английской Windows, иероглифы на русской) падал с «Unable to save shortcut ????».
+# Нашлось на раннере GitHub, где Windows английская.
+_PS = r"""
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
+
+[ComImport, InterfaceType(ComInterfaceType.InterfaceIsIUnknown), Guid("000214F9-0000-0000-C000-000000000046")]
+interface IShellLinkW {
+    void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder file, int cch, IntPtr fd, int flags);
+    void GetIDList(out IntPtr pidl);
+    void SetIDList(IntPtr pidl);
+    void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder name, int cch);
+    void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string name);
+    void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder dir, int cch);
+    void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string dir);
+    void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder args, int cch);
+    void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string args);
+    void GetHotkey(out short hotkey);
+    void SetHotkey(short hotkey);
+    void GetShowCmd(out int cmd);
+    void SetShowCmd(int cmd);
+    void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int cch, out int index);
+    void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string path, int index);
+    void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string rel, int reserved);
+    void Resolve(IntPtr hwnd, int flags);
+    void SetPath([MarshalAs(UnmanagedType.LPWStr)] string file);
+}
+
+[ComImport, Guid("00021401-0000-0000-C000-000000000046")]
+class ShellLink {}
+
+public static class WheelScriptLink {
+    public static void Save(string lnk, string target, string args, string dir, string icon, string desc) {
+        var link = (IShellLinkW)new ShellLink();
+        link.SetPath(target);
+        link.SetArguments(args);
+        link.SetWorkingDirectory(dir);
+        link.SetIconLocation(icon, 0);
+        link.SetDescription(desc);
+        ((IPersistFile)link).Save(lnk, true);
+    }
+}
+'@
+[WheelScriptLink]::Save($env:WS_LNK, $env:WS_TARGET, $env:WS_ARGS, $env:WS_DIR, $env:WS_ICON, $env:WS_DESC)
+"""
+
+# Без этого PowerShell пишет stderr в OEM-кодировке, и буквы, которых в ней нет,
+# теряются ещё до Python: причина ошибки доходила до человека вопросительными знаками.
+_UTF8 = "$ErrorActionPreference='Stop';[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
 
 
 def start_menu_dir() -> Path:
@@ -66,10 +119,12 @@ def create(path: Optional[Path] = None) -> Path:
                         "WS_ICON": icon, "WS_DESC": DESCRIPTION}
     # check=True дал бы голый CalledProcessError без единого слова о причине: сам
     # текст ошибки PowerShell при этом уже пойман в stderr и молча выброшен. А
-    # причина бывает внешняя - отключённый Windows Script Host, права на папку, -
+    # причина бывает внешняя - права на папку, политика, запрещающая PowerShell, -
     # и человеку в окне показывают именно её.
-    done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", _PS], env=env,
-                          capture_output=True, timeout=30, creationflags=CREATE_NO_WINDOW)
+    # -EncodedCommand: текст скрипта идёт в UTF-16, и кодовая страница его не портит.
+    encoded = base64.b64encode((_UTF8 + _PS).encode("utf-16-le")).decode("ascii")
+    done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+                          env=env, capture_output=True, timeout=60, creationflags=CREATE_NO_WINDOW)
     if done.returncode or not path.exists():
         why = _console_text(done.stderr or b"").strip() or f"код {done.returncode}"
         raise OSError(f"ярлык не создан: {path}\n{why}")
