@@ -1,0 +1,49 @@
+# Проверки на домашнем Gitea. Копия .github/workflows/ci.yml, отличие одно: задачи
+# идут на раннер ПК (метка windows), а не на windows-latest / ubuntu-latest - такие метки
+# есть только у раннера ноутбука, и без него задачи висели в очереди и отменялись.
+# Раз папка .gitea/workflows есть, Gitea берёт проверки только отсюда: выпуски и Pages -
+# дело GitHub, здесь их нет. Меняя проверки, править оба файла.
+
+# Проверки на каждый пуш.
+#
+# Раннер windows: программа шлёт ввод через WinAPI SendInput, а окно на Qt, и
+# часть проверок поднимает настоящее окно на настоящей платформе Qt. Руль для
+# проверок не нужен: движок чистый, а сервис ввода в них подменяется.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Проверки
+    runs-on: windows
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      # vgamepad при установке запускает MSI-установщик драйвера ViGEmBus и ждёт
+      # ответа - на раннере это повисло намертво до таймаута в 30 минут (в логе
+      # остался осиротевший msiexec). Проверкам пакет не нужен вовсе: там, где он
+      # важен, тесты подставляют его сами модулем-заглушкой. Версии остальных
+      # зависимостей берём из тех же файлов, чтобы не заводить им вторую копию.
+      - name: Зависимости без vgamepad
+        run: |
+          Get-Content requirements.txt, requirements-dev.txt |
+            Where-Object { $_ -notmatch '^(vgamepad|-r )' } |
+            Set-Content ci-requirements.txt
+          Get-Content ci-requirements.txt
+          pip install -r ci-requirements.txt
+
+      - name: Проверки
+        run: python -m pytest -q
