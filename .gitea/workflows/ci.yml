@@ -26,11 +26,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements-dev.txt
+      # Python ПК (3.13) в своём окружении, а не setup-python: тот ставит Python
+      # установщиком, которому нужны права администратора на реестр, - у раннера их нет.
+      - name: Python в отдельном окружении
+        run: |
+          py -3.13 -m venv .ci-venv
+          [IO.File]::AppendAllText($env:GITHUB_PATH, "$((Resolve-Path .ci-venv).Path)\Scripts`n")
 
       # vgamepad при установке запускает MSI-установщик драйвера ViGEmBus и ждёт
       # ответа - на раннере это повисло намертво до таймаута в 30 минут (в логе
