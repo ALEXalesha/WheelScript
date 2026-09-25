@@ -83,6 +83,55 @@ def win(qapp, svc, tmp_path):
     theme.apply(qapp, "light")
 
 
+def _open(svc, tmp_path):
+    w = MainWindow(svc, default_config(), tmp_path / "config.json")
+    w.setAttribute(Qt.WA_DontShowOnScreen)
+    w.show()
+    QApplication.processEvents()
+    return w
+
+
+def _close(qapp, w):
+    w.close()
+    w.deleteLater()
+    theme.apply(qapp, "light")
+
+
+def test_window_comes_back_where_and_how_large_it_was(qapp, svc, tmp_path):
+    w = _open(svc, tmp_path)
+    # Экран самого окна, а не основной: скрытое окно (WA_DontShowOnScreen) не узнаёт,
+    # что его передвинули на другой монитор. 960x600 влезает и в экран раннера 1024x768.
+    area = w.screen().availableGeometry()
+    x, y = area.x() + 40, area.y() + 60
+    w.setGeometry(x, y, 960, 600)
+    QApplication.processEvents()
+    _close(qapp, w)
+    assert isinstance(storage.load_window(tmp_path / "window.json"), str)
+    again = _open(svc, tmp_path)
+    try:
+        assert (again.width(), again.height()) == (960, 600)
+        assert (again.x(), again.y()) == (x, y)
+        # config.json не трогали: место окна живёт отдельно.
+        assert not (tmp_path / "config.json").exists() or "window" not in saved(again).to_dict()
+    finally:
+        _close(qapp, again)
+
+
+@pytest.mark.parametrize("text", ["", "{", "[]", "null", '{"window": 42}', '{"window": "@@@"}',
+                                  '{"window": "aGVsbG8="}', '{"window": "AAAA"}'])
+def test_broken_window_file_gives_default_size(qapp, svc, tmp_path, text):
+    fresh = _open(svc, tmp_path)  # файла ещё нет - размер по умолчанию
+    want = fresh.size()
+    fresh.close()  # закрытие само пишет window.json - его сейчас перезапишем мусором
+    fresh.deleteLater()
+    (tmp_path / "window.json").write_text(text, encoding="utf-8")
+    w = _open(svc, tmp_path)
+    try:
+        assert w.size() == want
+    finally:
+        _close(qapp, w)
+
+
 def rows(w):
     m = w.model
     return [[m.cell_text(r, c) for c in range(m.columnCount())] for r in range(m.rowCount())]
@@ -127,6 +176,10 @@ def click(w, row, col, double=False):
 def test_builds_and_lists_default_bindings(win, svc):
     assert win.model.rowCount() == len(win.profile.bindings) > 0
     assert svc.profiles[-1] == win.profile
+    # Руль виден окну после первого опроса (таймер 40 мс). Раньше тест полагался на то,
+    # что первый показ окна медленный и таймер успевает сработать; после других тестов
+    # окна показ быстрее - опрашиваем явно.
+    win.poll()
     assert "Маппинг выключен" in win.status.text()
     assert_in_sync(win)
 

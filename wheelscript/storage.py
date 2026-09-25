@@ -14,6 +14,7 @@ from .model import Config, default_config
 
 PORTABLE_FLAG = "portable.ini"
 CONFIG_NAME = "config.json"
+WINDOW_NAME = "window.json"
 
 
 def app_dir() -> Path:
@@ -67,6 +68,28 @@ def save_config(cfg: Config, path: Optional[Path] = None) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(cfg.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def load_window(path: Path) -> Optional[str]:
+    """Место и размер окна с прошлого раза (строка window_geometry) или None: нет файла,
+    мусор - окно просто откроется размером по умолчанию."""
+    try:
+        value = json.loads(path.read_text(encoding="utf-8")).get("window")
+    except (OSError, UnicodeDecodeError, ValueError, AttributeError, RecursionError):
+        return None
+    return value if isinstance(value, str) and value else None
+
+
+def save_window(text: str, path: Path) -> None:
+    """Отдельный файл, а не поле Config: место окна - не настройка, и испорченная строка
+    здесь не должна отправлять config.json в .broken. Запись через временный файл."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"window": text}), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        pass  # не запомнили - не беда, работать это не мешает
 
 
 def export_profile(profile, path: Path) -> None:

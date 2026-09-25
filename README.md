@@ -43,6 +43,8 @@ Builds are on the [releases page](https://github.com/ALEXalesha/WheelScript/rele
 | `WheelScript-<version>-setup.exe` | `%APPDATA%\WheelScript`. Installs per user, no admin rights needed |
 | `WheelScript-<version>-portable.zip` | `data\` next to the exe - unpack anywhere, a flash drive included |
 
+The window opens where it was closed and at the same size (`window.json` next to `config.json`). If that monitor is gone, it opens on the one you have.
+
 Gamepad mode additionally needs the free **ViGEmBus** driver; mouse and keyboard mapping does not.
 
 ## Running from source
@@ -61,7 +63,7 @@ python -m venv .venv
 .venv\Scripts\python -m pytest
 ```
 
-196 tests, about 85 seconds. The engine, the model, input recognition, the SendInput packing and the gamepad report are checked by property tests on [hypothesis](https://hypothesis.readthedocs.io/): it invents thousands of random profiles, wheel states and sequences of actions, and checks invariants rather than examples.
+205 tests, about 85 seconds. The engine, the model, input recognition, the SendInput packing and the gamepad report are checked by property tests on [hypothesis](https://hypothesis.readthedocs.io/): it invents thousands of random profiles, wheel states and sequences of actions, and checks invariants rather than examples.
 
 The invariants are the interesting part, because they are what a mapper can actually get wrong:
 

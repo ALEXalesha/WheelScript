@@ -21,7 +21,7 @@ from ..model import (RUMBLE, TICK_RATE, Binding, Config, Profile, Settings, clea
                      gamepad_profile, unique_name)
 from ..presets import PRESETS
 from ..theme import P
-from . import dialogs
+from . import dialogs, window_geometry
 from .binding_dialog import BindingDialog
 from .bindings_model import ON_COLUMN, BindingsModel
 from .fields import Choice, KeyField
@@ -171,6 +171,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title)
         self.setMinimumSize(900, 560)
         self.resize(1180, 700)
+        # Окно открывается там и такого размера, где его закрыли (3.1.0). window.json лежит
+        # рядом с config.json - в тестах и при съёмке скриншотов это временная папка.
+        self._window_path = cfg_path.with_name(storage.WINDOW_NAME)
+        window_geometry.restore(self, storage.load_window(self._window_path))
         self._apply_theme()
         self._build()
         self._refresh_profiles()
@@ -738,6 +742,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._closing = True
+        storage.save_window(window_geometry.encode(self), self._window_path)
         self.timer.stop()
         try:
             self.service.stop()
