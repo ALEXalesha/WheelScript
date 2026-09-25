@@ -39,5 +39,5 @@ jobs:
           Get-Content ci-requirements.txt
           pip install -r ci-requirements.txt
 
-      - name: 196 проверок
+      - name: Проверки
         run: python -m pytest -q
