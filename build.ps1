@@ -28,10 +28,17 @@ if (-not $SkipTests) {
 
 if (-not (Test-Path "$root\assets\icon.ico")) { & $py tools\make_icon.py }
 
+# Input is SDL 2.28.4 via PySDL2; pysdl2-dll also carries SDL2_image/mixer/ttf, but only
+# SDL2.dll is needed. It goes where sdl2dll.get_dllpath() looks: _internal\sdl2dll\dll.
+$sdlDll = (& $py -c "import os, sdl2dll; print(os.path.join(sdl2dll.get_dllpath(), 'SDL2.dll'))").Trim()
+if (-not (Test-Path $sdlDll)) { throw "SDL2.dll not found: $sdlDll (pip install pysdl2-dll)" }
+
 & $py -m PyInstaller --noconfirm --clean --windowed --name WheelScript `
     --icon "$root\assets\icon.ico" `
     --add-data "$root\assets\icon.ico;assets" `
+    --add-binary "$sdlDll;sdl2dll/dll" `
     --collect-all vgamepad `
+    --exclude-module pygame `
     --exclude-module numpy --exclude-module hypothesis --exclude-module pytest `
     --exclude-module tkinter --exclude-module _tkinter `
     --exclude-module PySide6.QtNetwork --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick `
@@ -40,6 +47,16 @@ if (-not (Test-Path "$root\assets\icon.ico")) { & $py tools\make_icon.py }
     --distpath "$root\dist" --workpath "$root\build\pyi" --specpath "$root\build" `
     "$root\run.py"
 if ($LASTEXITCODE) { throw "PyInstaller failed" }
+if (-not (Test-Path "$root\dist\WheelScript\_internal\sdl2dll\dll\SDL2.dll")) { throw "SDL2.dll is missing from the build" }
+if (Test-Path "$root\dist\WheelScript\_internal\pygame") { throw "pygame got into the build" }
+
+# Selftest of the built exe: input service without a window for 2 s, SDL + devices into a file.
+# Paused mapping, no hotkey, no profile: it presses nothing and does not rumble.
+$selftest = "$root\build\selftest.txt"
+Remove-Item -Force -ErrorAction SilentlyContinue $selftest
+$p = Start-Process -FilePath "$root\dist\WheelScript\WheelScript.exe" -ArgumentList "--selftest", "`"$selftest`"" -Wait -PassThru
+if (Test-Path $selftest) { Get-Content -Encoding UTF8 $selftest | Select-Object -First 12 | Write-Host }
+if ($p.ExitCode -ne 0) { throw "Selftest failed (exit $($p.ExitCode)), see $selftest" }
 
 # Software OpenGL fallback is never used by Qt Widgets; keep only Russian Qt texts.
 $qt = "$root\dist\WheelScript\_internal\PySide6"

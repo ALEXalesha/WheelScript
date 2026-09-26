@@ -71,7 +71,18 @@ def create_app():
     return app
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    args = sys.argv[1:] if argv is None else argv
+    if args[:1] == ["--selftest"]:
+        # Без окна, без лога в папке настроек и без проверки второго экземпляра: только
+        # сервис ввода на пару секунд, итог - в файл (у оконного exe нет консоли).
+        import tempfile
+        from pathlib import Path
+
+        from . import selftest
+        path = Path(args[1]) if len(args) > 1 else Path(tempfile.gettempdir()) / "WheelScript-selftest.txt"
+        sys.exit(selftest.run(path))
+
     _setup_logging()
     log.info("%s %s starting (portable=%s)", APP_NAME, __version__, storage.is_portable())
     app = create_app()

@@ -147,16 +147,32 @@ class FakeJoy:
         return "V9GEN2"
 
 
-def test_attach_keeps_haptic_across_rebuilds(monkeypatch):
-    """Регрессия: при старте pygame шлёт JOYDEVICEADDED, сервис перестраивает список
+def test_attach_keeps_haptic_across_rebuilds():
+    """Регрессия: при старте SDL шлёт JOYDEVICEADDED, сервис перестраивает список
     устройств, и переоткрытие haptic молча выключало вибрацию."""
     sdl = QuirkySDL()
-    monkeypatch.setattr(rumble, "_lib", sdl)
     h = WheelHaptic()
-    assert h.attach(None, [FakeJoy(0)])
-    assert h.attach(None, [FakeJoy(0)]), "тот же руль после rebuild — вибрация остаётся"
+    assert h.attach(sdl, [FakeJoy(0)])
+    assert h.attach(sdl, [FakeJoy(0)]), "тот же руль после rebuild — вибрация остаётся"
     assert sdl.opens == [100] and h.available
-    assert h.attach(None, [FakeJoy(3)]), "руль переподключили — открываем заново"
+    assert h.attach(sdl, [FakeJoy(3)]), "руль переподключили — открываем заново"
     assert sdl.opens == [100, 103] and 100 in sdl.closed and h.instance_id == 3
-    assert not h.attach(None, [])
+    assert not h.attach(sdl, [])
     assert not h.available and 103 in sdl.closed and h.instance_id is None
+
+
+class SlotSDL:
+    def __init__(self, slots):
+        self.slots = slots
+
+    def SDL_JoystickFromInstanceID(self, iid): return ("joy", iid) if iid in self.slots else None  # noqa: E704,N802
+    def SDL_JoystickGetPlayerIndex(self, sj): return self.slots[sj[1]]  # noqa: E704,N802
+
+
+def test_player_index_is_xinput_slot_or_none():
+    """По слоту сервис узнаёт свой виртуальный геймпад и не читает собственный выход как ввод."""
+    sdl = SlotSDL({0: 2, 1: -1})
+    assert rumble.player_index(sdl, FakeJoy(0)) == 2
+    assert rumble.player_index(sdl, FakeJoy(1)) is None, "-1 у SDL - слота нет"
+    assert rumble.player_index(sdl, FakeJoy(7)) is None, "не открыт - не наш"
+    assert rumble.player_index(None, FakeJoy(0)) is None, "ошибка SDL не роняет перестройку списка"

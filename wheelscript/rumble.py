@@ -7,16 +7,15 @@
 PLAY_MS, поэтому, пока вибрация нужна, она повторяется раньше, чем истечёт: если
 WheelScript зависнет или упадёт, руль сам затихнет.
 
-Руль трясём через SDL haptic из той же SDL2.dll, что у pygame: pygame умеет только
-Joystick.rumble(), а у PXN V9 он возвращает False, тогда как SDL_HapticRumblePlay работает.
+Руль трясём через SDL haptic той же SDL, что читает руль (модуль sdl2 из sdlinput):
+SDL_JoystickRumble у PXN V9 не работает (pygame через него возвращал False), а
+SDL_HapticRumblePlay работает.
 """
 
 from __future__ import annotations
 
-import ctypes
 import logging
 import math
-import os
 from typing import Optional
 
 log = logging.getLogger(__name__)
@@ -90,7 +89,6 @@ class RumbleRelay:
 
 
 SDL_INIT_HAPTIC = 0x1000
-_lib = None
 
 
 def _instance_id(joystick) -> Optional[int]:
@@ -100,33 +98,9 @@ def _instance_id(joystick) -> Optional[int]:
         return None
 
 
-def _load(pygame_mod):
-    """SDL2.dll, которую уже загрузил pygame (тот же экземпляр библиотеки и те же джойстики)."""
-    global _lib
-    if _lib is not None:
-        return _lib
-    path = os.path.join(os.path.dirname(getattr(pygame_mod, "__file__", "") or ""), "SDL2.dll")
-    sdl = ctypes.CDLL(path if os.path.exists(path) else "SDL2")
-    P, U32 = ctypes.c_void_p, ctypes.c_uint32
-    sdl.SDL_WasInit.argtypes, sdl.SDL_WasInit.restype = [U32], U32
-    sdl.SDL_InitSubSystem.argtypes = [U32]
-    sdl.SDL_JoystickFromInstanceID.argtypes, sdl.SDL_JoystickFromInstanceID.restype = [ctypes.c_int32], P
-    sdl.SDL_JoystickIsHaptic.argtypes = [P]
-    sdl.SDL_JoystickGetPlayerIndex.argtypes = [P]
-    sdl.SDL_HapticOpenFromJoystick.argtypes, sdl.SDL_HapticOpenFromJoystick.restype = [P], P
-    for name in ("SDL_HapticRumbleSupported", "SDL_HapticRumbleInit", "SDL_HapticRumbleStop"):
-        getattr(sdl, name).argtypes = [P]
-    sdl.SDL_HapticRumblePlay.argtypes = [P, ctypes.c_float, U32]
-    sdl.SDL_HapticClose.argtypes, sdl.SDL_HapticClose.restype = [P], None
-    sdl.SDL_GetError.restype = ctypes.c_char_p
-    _lib = sdl
-    return sdl
-
-
-def player_index(pygame_mod, joystick) -> Optional[int]:
+def player_index(sdl, joystick) -> Optional[int]:
     """Слот XInput устройства (0…3) или None. По нему сервис узнаёт свой виртуальный геймпад."""
     try:
-        sdl = _load(pygame_mod)
         sj = sdl.SDL_JoystickFromInstanceID(joystick.get_instance_id())
         i = sdl.SDL_JoystickGetPlayerIndex(sj) if sj else -1
     except Exception:  # noqa: BLE001
@@ -148,19 +122,18 @@ class WheelHaptic:
     def available(self) -> bool:
         return self._h is not None
 
-    def attach(self, pygame_mod, joysticks) -> bool:
+    def attach(self, sdl, joysticks) -> bool:
         """Вибрировать первым устройством с вибромотором. Уже открытый мотор не трогаем,
         пока его устройство на месте: SDL (DirectInput) не может заново открыть haptic
         у джойстика, который всё ещё открыт, — после close() руль терял бы вибрацию."""
         if self.available and self.instance_id in {_instance_id(j) for j in joysticks}:
             return True
         self.close()
-        return any(self.open(pygame_mod, j) for j in joysticks)
+        return any(self.open(sdl, j) for j in joysticks)
 
-    def open(self, pygame_mod, joystick) -> bool:
+    def open(self, sdl, joystick) -> bool:
         self.close()
         try:
-            sdl = _load(pygame_mod)
             if not sdl.SDL_WasInit(SDL_INIT_HAPTIC) and sdl.SDL_InitSubSystem(SDL_INIT_HAPTIC) != 0:
                 return False
             sj = sdl.SDL_JoystickFromInstanceID(joystick.get_instance_id())

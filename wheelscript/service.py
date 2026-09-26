@@ -1,19 +1,18 @@
 """
-Фоновый поток: единственный владелец pygame. Опрашивает все подключённые
+Фоновый поток: единственный владелец SDL (sdlinput). Опрашивает все подключённые
 джойстики/рули, отдаёт снимок состояния интерфейсу и гоняет движок.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import queue
 import threading
 import time
 from dataclasses import dataclass
 from typing import Optional
 
-from . import sendinput
+from . import sdlinput, sendinput
 from .engine import DeviceState, Engine
 from .gamepad import VirtualPad
 from .model import PAD_ACTIONS, Profile
@@ -42,6 +41,7 @@ class InputService:
         self._states: dict[str, DeviceState] = {}
         self._infos: list[DeviceInfo] = []
         self._joys: list = []
+        self._input: Optional[sdlinput.SdlInput] = None
         self._known: dict[str, set[int]] = {}
         self._suspend = 0
         self._toggle_key = "f8"
@@ -111,18 +111,14 @@ class InputService:
     # --- поток ---
 
     def _run(self) -> None:
-        # Без этого SDL перестаёт присылать события руля, когда в фокусе игра.
-        os.environ.setdefault("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1")
-        os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
         try:
-            import pygame
-            pygame.display.init()
-            pygame.joystick.init()
+            self._input = sdlinput.SdlInput(sdlinput.load())
+            self._input.init()
         except Exception as e:  # noqa: BLE001
-            log.exception("pygame init failed")
-            self.events.put(("error", f"Не удалось инициализировать pygame: {e}"))
+            log.exception("SDL init failed")
+            self.events.put(("error", f"Не удалось инициализировать SDL: {e}"))
             return
-        self._pg = pygame
+        log.info("SDL %s", sdlinput.describe(self._input.sdl))
         self._rebuild()
         last = time.perf_counter()
         toggle_prev = False
@@ -132,12 +128,7 @@ class InputService:
                 out: list = []
                 try:
                     out += self._drain_commands()
-                    rebuild = False
-                    for ev in pygame.event.get():
-                        if ev.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
-                            rebuild = True
-                        elif ev.type == pygame.JOYAXISMOTION:
-                            self._mark_known(ev.instance_id, ev.axis)
+                    rebuild = self._pump()
                     slot = self._pad.slot
                     if slot != self._own_slot:  # свой геймпад появился или исчез — пересобрать список
                         self._own_slot = slot
@@ -170,10 +161,8 @@ class InputService:
             self._apply(self._engine.release_all())
             self._haptic.close()
             self._pad.close()
-            try:
-                pygame.quit()
-            except Exception:  # noqa: BLE001
-                pass
+            self._joys = []
+            self._input.quit()
 
     def _drain_commands(self) -> list:
         out: list = []
@@ -236,14 +225,19 @@ class InputService:
                 self._pad.apply(ev[1])
         sendinput.apply(events)
 
+    def _pump(self) -> bool:
+        """События SDL: отметить сдвинутые оси; True - устройства подключили или отключили."""
+        changed, moved = self._input.poll()
+        for instance_id, axis in moved:
+            self._mark_known(instance_id, axis)
+        return changed
+
     def _rebuild(self) -> None:
-        pg = self._pg
+        sdl = self._input.sdl
         joys, infos, seen = [], [], {}
-        for i in range(pg.joystick.get_count()):
+        for j in self._input.scan():
             try:
-                j = pg.joystick.Joystick(i)
-                j.init()
-                if self._own_slot is not None and player_index(pg, j) == self._own_slot:
+                if self._own_slot is not None and player_index(sdl, j) == self._own_slot:
                     log.info("skip own virtual gamepad: %s (XInput slot %s)", j.get_name(), self._own_slot)
                     continue
                 guid = j.get_guid()
@@ -251,12 +245,16 @@ class InputService:
                 key = guid if seen[guid] == 1 else f"{guid}#{seen[guid]}"
                 joys.append((key, j))
                 infos.append(DeviceInfo(key, j.get_name(), j.get_numaxes(), j.get_numbuttons(), j.get_numhats()))
-            except pg.error:
-                log.exception("joystick %s init failed", i)
+            except Exception:  # noqa: BLE001
+                log.exception("joystick %s init failed", j.get_instance_id())
         self._joys = joys
         self._known = {k: set() for k, _ in joys}
-        # Вибрируем первым устройством с вибромотором (обычно это и есть руль).
-        if self._haptic.attach(pg, [j for _, j in joys]):
+        # Вибрируем первым устройством с вибромотором (обычно это и есть руль). Сначала
+        # вибромотор отпускает отключённый руль, потом закрываются лишние джойстики:
+        # haptic не должен пережить свой джойстик.
+        attached = self._haptic.attach(sdl, [j for _, j in joys])
+        self._input.keep([j for _, j in joys])
+        if attached:
             status = f"вибрирует: {self._haptic.name}"
         else:
             status = "у руля нет вибромотора" if joys else "руль не подключён"
