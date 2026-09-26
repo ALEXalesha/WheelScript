@@ -63,7 +63,7 @@ python -m venv .venv
 .venv\Scripts\python -m pytest
 ```
 
-205 tests, about 85 seconds. The engine, the model, input recognition, the SendInput packing and the gamepad report are checked by property tests on [hypothesis](https://hypothesis.readthedocs.io/): it invents thousands of random profiles, wheel states and sequences of actions, and checks invariants rather than examples.
+248 tests, about two minutes. The engine, the model, input recognition, the SendInput packing and the gamepad report are checked by property tests on [hypothesis](https://hypothesis.readthedocs.io/): it invents thousands of random profiles, wheel states and sequences of actions, and checks invariants rather than examples.
 
 The invariants are the interesting part, because they are what a mapper can actually get wrong:
 
@@ -79,7 +79,10 @@ The invariants are the interesting part, because they are what a mapper can actu
 - the mapping is paused exactly for the duration of the binding editor or a hotkey capture, however the window was closed (Save, Cancel, Esc, the X);
 - every "one tap" lasts at least 50 ms and none is lost;
 - any JSON, even garbage, turns into a valid config and is written back as UTF-8;
-- a pedal that "jumps" from 0 to −1 on its first report does not count as a press.
+- a pedal that "jumps" from 0 to −1 on its first report does not count as a press;
+- the input layer reads axes, buttons and the hat exactly as pygame did, keeps an open wheel open across device rescans (so its vibration motor survives), and closes an unplugged wheel only after its vibration motor has been let go.
+
+The input layer is tested twice: against a stand-in for SDL that behaves like SDL 2.28 where WheelScript depends on it, and against the real SDL library with an SDL virtual wheel, which exists only inside the test process.
 
 A longer run, 5000 examples per property:
 
@@ -93,7 +96,13 @@ A longer run, 5000 examples per property:
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
-Creates `.venv` if needed, installs the dependencies, runs the tests, builds the exe with PyInstaller and packs `release/WheelScript-<version>-portable.zip` plus `release/WheelScript-<version>-setup.exe` (Inno Setup). Without Inno Setup only the portable archive is built. The ViGEmBus driver is not bundled - it is installed separately.
+Creates `.venv` if needed, installs the dependencies, runs the tests, builds the exe with PyInstaller, runs the built exe's selftest and packs `release/WheelScript-<version>-portable.zip` plus `release/WheelScript-<version>-setup.exe` (Inno Setup). Without Inno Setup only the portable archive is built. The ViGEmBus driver is not bundled - it is installed separately.
+
+`WheelScript.exe --selftest [file]` starts the input service without a window for 2 seconds and writes the SDL version, the path of the `SDL2.dll` it loaded, the devices it sees and any errors into the file (`%TEMP%\WheelScript-selftest.txt` by default). The mapping is paused and the hotkey is off, so it presses nothing and does not rumble the wheel. Exit code 0 means it is fine.
+
+## SDL without pygame since 3.2
+
+Up to 3.1 the wheel was read through pygame, which also brought the `SDL2.dll` used for rumble. pygame is no longer used; the input layer (`wheelscript/sdlinput.py`) talks to SDL through [PySDL2](https://github.com/py-sdl/py-sdl2), and `SDL2.dll` comes from `pysdl2-dll`. SDL is pinned to 2.28.4 - the same version pygame 2.6.1 shipped - because device GUIDs (bindings in `config.json` are tied to them), axis scaling and the DirectInput rumble quirks belong to that exact build. Nothing changes for the user. The reasons, and why not raw XInput/DirectInput, are in `docs/superpowers/plans/2026-09-26-wheelscript-no-pygame.md`.
 
 ## Qt since 3.0
 
@@ -107,7 +116,7 @@ Only the wheel is stood in for. It is not plugged into the machine that builds t
 
 ## Stack
 
-Python · PySide6 (Qt 6) · pygame (SDL) · vgamepad (ViGEmBus) · WinAPI SendInput · hypothesis · PyInstaller · Inno Setup
+Python · PySide6 (Qt 6) · PySDL2 (SDL 2.28.4) · vgamepad (ViGEmBus) · WinAPI SendInput · hypothesis · PyInstaller · Inno Setup
 
 ## Licence
 
