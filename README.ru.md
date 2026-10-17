@@ -14,6 +14,9 @@
 
 </div>
 
+[![Built with Claude Code](https://img.shields.io/badge/Built_with-Claude_Code-D97757?logo=claude&logoColor=white)](https://claude.com/claude-code)
+Код, тесты и документация этого проекта написаны Claude (Anthropic) в Claude Code. Идеи, проверка и решения - Алексей.
+
 Превращает игровой руль в мышь и клавиатуру — или в виртуальный геймпад Xbox.
 Нужен для игр, которые не понимают руль: поворот руля крутит камеру, педали
 жмут клавиши (или курки геймпада), кнопки руля и коробка передач делают что
