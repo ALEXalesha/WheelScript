@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/icon.png" width="96" alt="">
+
 # WheelScript
 
 **Turns a racing wheel into a mouse and a keyboard - or into a virtual Xbox gamepad. For games that do not understand a wheel: steering moves the camera, pedals press keys, buttons and the shifter do whatever you map them to.**
