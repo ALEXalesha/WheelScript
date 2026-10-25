@@ -26,6 +26,13 @@ def fit_widths(needs: list[int], available: int, minimum: int = 60) -> list[int]
     extra = [w - minimum for w in want]
     k = (available - minimum * n) / sum(extra)
     out = [minimum + int(e * k) for e in extra]
-    # остаток от округления - самой широкой, чтобы сумма была ровно available
-    out[max(range(n), key=lambda i: want[i])] += available - sum(out)
+    # остаток от округления - по одной точке колонкам с наибольшей отброшенной долей, и только тем, что ещё
+    # уже своего текста (CI 25.10: целиком самой широкой - и она становилась шире содержимого)
+    order = sorted(range(n), key=lambda i: (extra[i] * k - int(extra[i] * k), want[i]), reverse=True)
+    rest = available - sum(out)
+    while rest > 0:
+        for i in order:
+            if rest > 0 and out[i] < want[i]:
+                out[i] += 1
+                rest -= 1
     return out

@@ -4,7 +4,7 @@
 from pathlib import Path
 
 import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @given(st.lists(st.integers(0, 900), min_size=1, max_size=8), st.integers(0, 3000))
+@example([109, 119, 25, 66, 94, 100], 547)   # CI 25.10: остаток округления делал самую широкую шире текста
 def test_ширины_колонок_в_сумме_ровно_доступное_и_по_содержимому_когда_влезает(needs, available):
     w = fit_widths(needs, available, minimum=60)
     assert len(w) == len(needs)
