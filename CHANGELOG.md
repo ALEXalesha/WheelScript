@@ -15,6 +15,26 @@
 - The build bundles only `SDL2.dll` (not the whole pygame set of image, audio and font libraries), checks that pygame did not get in and runs the selftest of the built exe. The portable archive is 1.7 MB smaller.
 - Tests: 248 (+43), including the input layer against a stand-in for SDL and against the real SDL with a virtual wheel.
 
+## 3.1.0 - 2026-09-25
+
+The place, size and maximized state are written to `window.json` next to `config.json` when the window closes, and put back at the next start. If that monitor is gone or the title bar would land off every screen, the window opens at the default size in the middle instead. A broken `window.json` never touches the settings: it is a separate file, so it cannot send `config.json` to `config.broken-*.json`.
+
+The ViGEmBus driver for the virtual gamepad is installed separately, as before. 205 tests green.
+
+## 3.0.1 - 2026-09-23
+
+The shortcut used to be written through `WScript.Shell`, which saves `.lnk` files through the ANSI code page. With letters outside that code page in the path (Cyrillic on an English Windows, CJK on a Russian one) the shortcut was not created at all, and the PowerShell error text lost the same letters to the OEM code page on the way to the window. It was found by CI on the GitHub runner, which runs an English Windows: the CI of this repository had been red since the first publication. The shortcut is now written through `IShellLinkW`, the script goes to PowerShell as `-EncodedCommand`, and errors come back in UTF-8. The tests use Japanese letters, which exist in no Russian Windows code page, so they fail without the fix on a Russian machine too.
+
+The ViGEmBus driver for the virtual gamepad is installed separately, as before. 196 tests green, locally and in CI.
+
+## 3.0.0 - 2026-09-22
+
+The interface was rewritten from Tkinter to Qt (PySide6).
+
+**Why:** Tk lagged noticeably while the window was being resized on Windows, and the dark theme had to be assembled widget by widget. Qt draws the window as one thing and follows the system light/dark setting.
+
+**What the program does:** maps a racing wheel, its pedals, buttons and shifter to mouse, keyboard or a virtual Xbox 360 gamepad, for games that do not understand a wheel. Bindings are made by clicking the input field and then moving the thing you want to bind - the program recognises the axis, button or hat by itself, and guesses whether an axis is a pedal.
+
 ---
 
 ## 3.2.0 - 2026-09-26
