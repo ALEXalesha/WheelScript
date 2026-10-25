@@ -63,7 +63,7 @@ class BindingsModel(QAbstractTableModel):
     def cell_text(self, row: int, col: int) -> str:
         b = self._bindings[row]
         if col == 0:
-            return "✔" if b.enabled else "—"
+            return "✔" if b.enabled else "-"
         if col == 1:
             return b.name
         if col == 2:

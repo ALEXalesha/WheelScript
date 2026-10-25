@@ -1,4 +1,4 @@
-"""Ярлык в меню «Пуск» — по нему WheelScript находится через поиск Windows."""
+"""Ярлык в меню «Пуск» - по нему WheelScript находится через поиск Windows."""
 
 from __future__ import annotations
 

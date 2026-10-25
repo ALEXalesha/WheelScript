@@ -54,7 +54,7 @@ def _user_index(pad) -> Optional[int]:
 
         from vgamepad.win import vigem_client
         idx = ctypes.c_ulong()
-        # у VX360Gamepad нет геттеров для этих указателей — только приватные поля
+        # у VX360Gamepad нет геттеров для этих указателей - только приватные поля
         err = vigem_client.vigem_target_x360_get_user_index(pad._busp, pad._devicep, ctypes.byref(idx))
     except Exception:  # noqa: BLE001
         return None
@@ -68,12 +68,12 @@ def explain(e: BaseException) -> str:
     if "BUS_NOT_FOUND" in text:
         return "не установлен драйвер ViGEmBus"
     if "BUS_VERSION_MISMATCH" in text:
-        return "устаревший драйвер ViGEmBus — обновите его"
+        return "устаревший драйвер ViGEmBus - обновите его"
     return text or e.__class__.__name__
 
 
 class VirtualPad:
-    """Создаёт геймпад при первой необходимости; если драйвера нет — пробует снова раз в RETRY секунд."""
+    """Создаёт геймпад при первой необходимости; если драйвера нет - пробует снова раз в RETRY секунд."""
 
     RETRY = 5.0
 
@@ -114,7 +114,7 @@ class VirtualPad:
         try:
             import vgamepad
             self._pad = vgamepad.VX360Gamepad()
-        except Exception as e:  # noqa: BLE001 — vgamepad бросает голый Exception
+        except Exception as e:  # noqa: BLE001 - vgamepad бросает голый Exception
             self._set_status(f"недоступен: {explain(e)}")
             return None
         self._listen(self._pad)
@@ -127,7 +127,7 @@ class VirtualPad:
         def notification(client, target, large_motor, small_motor, led_number, user_data):
             try:
                 self.on_rumble(large_motor, small_motor)
-            except Exception:  # noqa: BLE001 — исключение в ctypes-колбэке некуда пробросить
+            except Exception:  # noqa: BLE001 - исключение в ctypes-колбэке некуда пробросить
                 log.exception("rumble callback failed")
         try:
             pad.register_notification(notification)

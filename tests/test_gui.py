@@ -147,7 +147,7 @@ def assert_in_sync(w):
     assert m.bindings == w.profile.bindings
     assert m.rowCount() == len(w.profile.bindings)
     for r, b in enumerate(w.profile.bindings):
-        assert m.cell_text(r, 0) == ("✔" if b.enabled else "—")
+        assert m.cell_text(r, 0) == ("✔" if b.enabled else "-")
         assert m.cell_text(r, 1) == b.name
     if w.cfg_path.exists():
         assert saved(w).to_dict() == w.cfg.to_dict()
@@ -279,7 +279,7 @@ def test_monitor_follows_state(win, svc):
     svc.state = DeviceState((0.5, 0.1, -1.0), (True,) * 8, ((1, 0),))
     win.poll()
     assert win.monitor.canvas.state == svc.state
-    assert not win.monitor.update_view(*svc.snapshot()), "без изменений — без перерисовки"
+    assert not win.monitor.update_view(*svc.snapshot()), "без изменений - без перерисовки"
     img = win.monitor.canvas.grab()
     assert not img.isNull()
     svc.connected = False

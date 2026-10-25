@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 PLAY_MS = 400      # сколько живёт одна команда на руле
 REFRESH = 0.2      # повторять не реже: при тике до 0.1 с эффект не успевает истечь
-STEP = 0.02        # меньшие изменения силы не шлём; ниже STEP — тишина
+STEP = 0.02        # меньшие изменения силы не шлём; ниже STEP - тишина
 SMALL_WEIGHT = 0.6
 TEST_SECONDS = 0.5
 
@@ -35,7 +35,7 @@ def _clamp01(x: float) -> float:
 
 def level_of(large: int, small: int) -> float:
     """Сила 0…1 из двух моторов Xbox. У руля один вибромотор, поэтому берём сильнейший;
-    маленький мотор в играх — лёгкое «жужжание», ему вес поменьше."""
+    маленький мотор в играх - лёгкое «жужжание», ему вес поменьше."""
     return _clamp01(max(large, SMALL_WEIGHT * small) / 255)
 
 
@@ -44,7 +44,7 @@ class RumbleRelay:
 
     def __init__(self) -> None:
         self._game = (0, 0)
-        self._level = 0.0            # что сейчас играет на руле (0 — тишина)
+        self._level = 0.0            # что сейчас играет на руле (0 - тишина)
         self._sent_at = -math.inf
         self._test_until = -math.inf
         self._test_level = 0.0
@@ -125,7 +125,7 @@ class WheelHaptic:
     def attach(self, sdl, joysticks) -> bool:
         """Вибрировать первым устройством с вибромотором. Уже открытый мотор не трогаем,
         пока его устройство на месте: SDL (DirectInput) не может заново открыть haptic
-        у джойстика, который всё ещё открыт, — после close() руль терял бы вибрацию."""
+        у джойстика, который всё ещё открыт, - после close() руль терял бы вибрацию."""
         if self.available and self.instance_id in {_instance_id(j) for j in joysticks}:
             return True
         self.close()

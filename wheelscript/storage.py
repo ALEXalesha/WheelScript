@@ -44,7 +44,7 @@ def config_path() -> Path:
 
 
 def load_config(path: Optional[Path] = None) -> tuple[Config, Optional[str]]:
-    """Возвращает (конфиг, предупреждение). Битый файл не теряется — уходит в .bak."""
+    """Возвращает (конфиг, предупреждение). Битый файл не теряется - уходит в .bak."""
     path = path or config_path()
     if not path.exists():
         return default_config(), None

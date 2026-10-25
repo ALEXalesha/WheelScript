@@ -43,7 +43,7 @@ def is_dark(palette) -> bool:
 
 
 def sync(app) -> bool:
-    """Выбрать палитру P по тому, какую тему Qt показывает сейчас. True — тёмная."""
+    """Выбрать палитру P по тому, какую тему Qt показывает сейчас. True - тёмная."""
     dark = is_dark(app.palette())
     P.clear()
     P.update(DARK if dark else LIGHT)
@@ -51,7 +51,7 @@ def sync(app) -> bool:
 
 
 def apply(app, mode: str) -> bool:
-    """Режим «system» / «light» / «dark»: Qt меняет палитру, мы — смысловые цвета."""
+    """Режим «system» / «light» / «dark»: Qt меняет палитру, мы - смысловые цвета."""
     app.styleHints().setColorScheme(color_scheme(mode))
     app.processEvents()
     return sync(app)

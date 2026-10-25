@@ -163,7 +163,7 @@ def test_theme_setting_is_canonical(x):
     assert Settings.from_dict(s.to_dict()) == s
     if isinstance(x, str) and x in THEMES:
         assert s.theme == x
-    assert Settings.from_dict({}).theme == "system", "по умолчанию — как в системе"
+    assert Settings.from_dict({}).theme == "system", "по умолчанию - как в системе"
 
 
 def test_huge_int_does_not_crash():

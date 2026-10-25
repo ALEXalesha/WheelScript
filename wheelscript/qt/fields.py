@@ -60,7 +60,7 @@ class _CaptureLine(QLineEdit):
         super().mousePressEvent(event)
 
     def event(self, event):
-        # Во время захвата Tab — тоже клавиша, а не переход к следующему полю.
+        # Во время захвата Tab - тоже клавиша, а не переход к следующему полю.
         if event.type() in (QEvent.KeyPress, QEvent.KeyRelease) and self.owner.capturing:
             if event.type() == QEvent.KeyPress:
                 self.owner.key_pressed(event)
@@ -91,7 +91,7 @@ def _paint_waiting(line: QLineEdit, waiting: bool) -> None:
 
 
 class InputField(QWidget):
-    """Поле «ввод с руля»: щелчок — и первая нажатая кнопка/ось/крестовина попадает в поле."""
+    """Поле «ввод с руля»: щелчок - и первая нажатая кнопка/ось/крестовина попадает в поле."""
     source_changed = Signal(object)
 
     def __init__(self, service, source: InputSource, parent=None):
@@ -130,12 +130,12 @@ class InputField(QWidget):
             return
         states, infos = self.service.snapshot()
         if not infos:
-            dialogs.warning(self.window(), "Руль не подключён — нечего считывать.")
+            dialogs.warning(self.window(), "Руль не подключён - нечего считывать.")
             return
         self._capture = Capture(states)
         self._deadline = time.monotonic() + CAPTURE_TIMEOUT
         _paint_waiting(self.line, True)
-        self.line.setText("жду: нажми кнопку, сдвинь ось или крестовину…  (Esc — отмена)")
+        self.line.setText("жду: нажми кнопку, сдвинь ось или крестовину…  (Esc - отмена)")
         self.line.setFocus()
         self.timer.start()
 
@@ -186,9 +186,9 @@ class InputField(QWidget):
 
 
 class KeyField(QWidget):
-    """Поле клавиши: щелчок — нажми клавишу/сочетание. Плюс выбор из списка и «✕»."""
+    """Поле клавиши: щелчок - нажми клавишу/сочетание. Плюс выбор из списка и «✕»."""
     value_changed = Signal(tuple)
-    capture_changed = Signal(bool)  # True — начали ловить, False — закончили
+    capture_changed = Signal(bool)  # True - начали ловить, False - закончили
 
     def __init__(self, value: tuple[str, ...], combo: bool = True, allow_empty: bool = False,
                  parent=None):
@@ -239,7 +239,7 @@ class KeyField(QWidget):
         self._collected.clear()
         self.capture_changed.emit(True)
         _paint_waiting(self.line, True)
-        self.line.setText("нажми клавишу" + (" или сочетание" if self.combo else "") + "…  (Esc — отмена)")
+        self.line.setText("нажми клавишу" + (" или сочетание" if self.combo else "") + "…  (Esc - отмена)")
         self.line.setFocus()
         self.timer.start(int(CAPTURE_TIMEOUT * 1000))
 

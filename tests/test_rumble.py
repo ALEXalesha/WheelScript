@@ -48,10 +48,10 @@ def test_relay_invariants(seq):
                 playing, expires = True, now + PLAY_MS / 1000
             elif cmd is not None:
                 assert cmd == ("stop",)
-                assert playing, "stop без play — лишняя команда"
+                assert playing, "stop без play - лишняя команда"
                 playing = False
             if want < STEP:
-                assert not playing and r.level == 0.0, "игра затихла или маппинг выключен — руль тоже молчит"
+                assert not playing and r.level == 0.0, "игра затихла или маппинг выключен - руль тоже молчит"
             else:
                 assert playing and abs(r.level - want) < STEP, "руль отстаёт от игры не больше чем на STEP"
                 assert expires - now > PLAY_MS / 1000 - REFRESH - 1e-9, "эффект не истекает до следующего тика"
@@ -153,9 +153,9 @@ def test_attach_keeps_haptic_across_rebuilds():
     sdl = QuirkySDL()
     h = WheelHaptic()
     assert h.attach(sdl, [FakeJoy(0)])
-    assert h.attach(sdl, [FakeJoy(0)]), "тот же руль после rebuild — вибрация остаётся"
+    assert h.attach(sdl, [FakeJoy(0)]), "тот же руль после rebuild - вибрация остаётся"
     assert sdl.opens == [100] and h.available
-    assert h.attach(sdl, [FakeJoy(3)]), "руль переподключили — открываем заново"
+    assert h.attach(sdl, [FakeJoy(3)]), "руль переподключили - открываем заново"
     assert sdl.opens == [100, 103] and 100 in sdl.closed and h.instance_id == 3
     assert not h.attach(sdl, [])
     assert not h.available and 103 in sdl.closed and h.instance_id is None

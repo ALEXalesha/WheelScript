@@ -1,4 +1,4 @@
-"""Инварианты определения ввода «кликни поле — нажми на руле»."""
+"""Инварианты определения ввода «кликни поле - нажми на руле»."""
 
 from hypothesis import assume, given
 from hypothesis import strategies as st
@@ -74,7 +74,7 @@ def test_axis_detection_and_mode(i, rest, target):
 
 @given(st.integers(0, N_AXES - 1), good_axis)
 def test_unknown_axis_first_value_is_not_a_press(i, first):
-    """Регрессия PXN: педаль «прыгает» из None в -1 при первом HID-отчёте — это не нажатие."""
+    """Регрессия PXN: педаль «прыгает» из None в -1 при первом HID-отчёте - это не нажатие."""
     axes = [None] * N_AXES
     c = Capture({DEV: DeviceState(tuple(axes))})
     axes[i] = first

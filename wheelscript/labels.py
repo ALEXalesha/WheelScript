@@ -45,13 +45,13 @@ DIRECTION_LABELS = {"left": "влево", "right": "вправо", "up": "вве
 PRESS_LABELS = {
     "hold": "держать, пока нажато",
     "tap": "одно короткое нажатие",
-    "toggle": "залипание (нажал — вкл, ещё раз — выкл)",
+    "toggle": "залипание (нажал - вкл, ещё раз - выкл)",
 }
 
 
 def source_text(src: InputSource, device_names: Optional[Mapping[str, str]] = None) -> str:
     if src.kind == "none":
-        return "—"
+        return "-"
     if src.kind == "axis":
         text = f"Ось {src.index}, {AXIS_MODE_LABELS.get(src.mode, src.mode)}"
     elif src.kind == "button":

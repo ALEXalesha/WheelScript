@@ -3,7 +3,7 @@
 
 Всё неизменяемое (frozen dataclass). from_dict() принимает что угодно
 (в т.ч. битый/чужой JSON) и всегда возвращает валидный объект в
-каноническом виде, поэтому to_dict -> from_dict — тождественное преобразование.
+каноническом виде, поэтому to_dict -> from_dict - тождественное преобразование.
 """
 
 from __future__ import annotations
@@ -276,7 +276,7 @@ class Settings:
     start_enabled: bool = False
     active_profile: str = ""
     monitor_device: str = ""
-    rumble: int = 100  # сила вибрации из игры на руле, %; 0 — выключено
+    rumble: int = 100  # сила вибрации из игры на руле, %; 0 - выключено
     theme: str = "system"
 
     @staticmethod
@@ -352,7 +352,7 @@ class Config:
 
 
 def default_profile() -> Profile:
-    """Раскладка под PXN V9 Gen 2 (ось 0 — руль, 2 — газ, 5 — тормоз, 6 — сцепление)."""
+    """Раскладка под PXN V9 Gen 2 (ось 0 - руль, 2 - газ, 5 - тормоз, 6 - сцепление)."""
     B, S, A = Binding.make, InputSource, Action
     return Profile("Руль как мышь + W/S", (
         B("Поворот камеры (руль)", S.axis(0, "full"), A.move("right", 2250), deadzone=0.03),
@@ -366,7 +366,7 @@ def default_profile() -> Profile:
 
 
 def gamepad_profile() -> Profile:
-    """Руль как виртуальный геймпад Xbox 360: руль — левый стик, педали — курки."""
+    """Руль как виртуальный геймпад Xbox 360: руль - левый стик, педали - курки."""
     B, S, A = Binding.make, InputSource, Action
     return Profile("Руль как геймпад (Xbox)", (
         B("Руль → левый стик", S.axis(0, "full"), A.stick("left", "right"), deadzone=0.02),

@@ -18,13 +18,13 @@ pad_states = st.builds(PadState, st.frozensets(st.sampled_from(PAD_BUTTONS)),
 def test_bits_are_distinct_xinput_flags():
     bits = list(gamepad.BITS.values())
     assert len(set(bits)) == len(bits) == len(PAD_BUTTONS)
-    assert all(b & (b - 1) == 0 for b in bits), "каждая кнопка — ровно один бит"
+    assert all(b & (b - 1) == 0 for b in bits), "каждая кнопка - ровно один бит"
     assert set(gamepad.BITS) == set(PAD_BUTTONS)
 
 
 @given(pad_states)
 def test_report_values_fit_xusb_types(state):
-    """Любое состояние (даже NaN/inf) влезает в WORD/BYTE/SHORT — никакого переполнения стика."""
+    """Любое состояние (даже NaN/inf) влезает в WORD/BYTE/SHORT - никакого переполнения стика."""
     b, lt, rt, lx, ly, rx, ry = gamepad.report_values(state)
     assert 0 <= b <= 0xFFFF
     assert 0 <= lt <= 255 and 0 <= rt <= 255
@@ -103,7 +103,7 @@ def test_user_index_uses_real_pad_fields(monkeypatch):
 
     def get_user_index(bus, dev, out):
         calls.append((bus, dev))
-        out._obj.value = 3  # out — ctypes.byref(c_ulong)
+        out._obj.value = 3  # out - ctypes.byref(c_ulong)
         return gamepad.VIGEM_ERROR_NONE
     client.vigem_target_x360_get_user_index = get_user_index
     win = types.ModuleType("vgamepad.win")

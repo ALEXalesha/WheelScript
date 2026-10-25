@@ -182,7 +182,7 @@ class BindingDialog(QDialog):
         self.tune.setColumnMinimumWidth(0, 150)
         root.addWidget(self.tune_box)
 
-        pv = QGroupBox("Проверка — покрути / нажми на руле")
+        pv = QGroupBox("Проверка - покрути / нажми на руле")
         pv_lay = QVBoxLayout(pv)
         self.preview = Preview()
         self.preview_text = QLabel("")
@@ -275,7 +275,7 @@ class BindingDialog(QDialog):
                 self._row(0, "Курок", Choice(labels.PAD_TRIGGER_LABELS, self.trigger_val, self._set_trigger))
             self._hint(2, "Игра увидит виртуальный геймпад Xbox 360 (нужен драйвер ViGEmBus).")
         else:
-            self._hint(0, "Нажатие включает или выключает весь маппинг — то же, что горячая клавиша.")
+            self._hint(0, "Нажатие включает или выключает весь маппинг - то же, что горячая клавиша.")
 
     def _tune_row(self, r: int, text: str, tune: Tune) -> None:
         caption = QLabel(text)
@@ -429,7 +429,7 @@ class BindingDialog(QDialog):
             dialogs.error(self, "Выбери клавишу.")
             return
         if not b.source.is_set and not dialogs.yes_no(
-                self, "Ввод с руля не назначен — привязка не будет срабатывать. Сохранить так?"):
+                self, "Ввод с руля не назначен - привязка не будет срабатывать. Сохранить так?"):
             return
         self.result_binding = b
         self.accept()

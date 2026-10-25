@@ -2,7 +2,7 @@
 Обёртка над WinAPI SendInput.
 
 Клавиши шлются scan-кодами: игры с raw input / DirectInput читают именно их
-и игнорируют «виртуальные» нажатия. Стрелки, Home/End и т.п. — extended
+и игнорируют «виртуальные» нажатия. Стрелки, Home/End и т.п. - extended
 клавиши, без флага KEYEVENTF_EXTENDEDKEY Windows примет их за цифры Numpad.
 """
 

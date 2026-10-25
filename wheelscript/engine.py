@@ -32,7 +32,7 @@ WHEEL_VEC = {"up": (1, False), "down": (-1, False), "right": (1, True), "left": 
 
 @dataclass(frozen=True)
 class DeviceState:
-    # None в axes — ось ещё ни разу не присылала значение (SDL до первого движения
+    # None в axes - ось ещё ни разу не присылала значение (SDL до первого движения
     # отдаёт 0.0, а у педалей покой = -1, поэтому доверять этому 0.0 нельзя).
     axes: tuple[Optional[float], ...] = ()
     buttons: tuple[bool, ...] = ()
@@ -69,7 +69,7 @@ def _clamp(x: float, lo: float, hi: float) -> float:
 
 
 def read_source(src: InputSource, states: States, default_device: Optional[str] = None) -> Optional[float]:
-    """Нормализованное значение источника: full -> [-1, 1], остальное -> [0, 1], None — нет данных."""
+    """Нормализованное значение источника: full -> [-1, 1], остальное -> [0, 1], None - нет данных."""
     if src.kind == "none":
         return None
     key = src.device or default_device
@@ -259,7 +259,7 @@ class Engine:
                 continue
 
             if v is None:
-                self._tap_queue.pop(i, None)  # устройство пропало — отложенные тапы не проигрываем
+                self._tap_queue.pop(i, None)  # устройство пропало - отложенные тапы не проигрываем
             mag = 0.0 if v is None else abs(v)
             was = self._active.get(i, False)
             now = mag >= (release_level(b.threshold) if was else b.threshold)
@@ -328,7 +328,7 @@ class Engine:
                 self._latched[i] = not self._latched.get(i, False)
             return self._latched.get(i, False)
         if press == "tap":
-            # Каждое нажатие — отдельный тап не короче TAP_SECONDS. Нажатие во время
+            # Каждое нажатие - отдельный тап не короче TAP_SECONDS. Нажатие во время
             # текущего тапа не продлевает его, а встаёт в очередь (иначе оно терялось).
             on = self._on.get(i, False)
             if rising and on:

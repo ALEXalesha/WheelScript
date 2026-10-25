@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComb
 
 from .. import APP_NAME, __version__, keys, storage, theme
 from ..engine import binding_value, shape
+from ..layout import fit_widths
 from ..model import (RUMBLE, TICK_RATE, Binding, Config, Profile, Settings, clean_text, default_profile,
                      gamepad_profile, unique_name)
 from ..presets import PRESETS
@@ -32,6 +33,9 @@ log = logging.getLogger(__name__)
 POLL_MS = 40
 PROFILE_FILTER = "Профиль WheelScript (*.json);;Все файлы (*.*)"
 MAX_PROFILES = 64
+# Кнопки с меню: индикатор Fusion рисовал крошечную закорючку «ˬ» под текстом (проверка 23.10, та же грабля,
+# что у выпадающих списков - память qt-combo-dropdown). Индикатор прячем, стрелка ▾ - в самом тексте.
+MENU_BUTTON_QSS = "QToolButton::menu-indicator { image: none; width: 0px; height: 0px; }"
 
 
 class StatusDot(QWidget):
@@ -117,6 +121,33 @@ class BindingsView(QTableView):
             return
         super().mousePressEvent(event)
 
+    # Колонки по содержимому (проверка 23.10: «Название» обрезалось, «Параметры» с запасом): «Вкл» -
+    # ON_WIDTH, остальным - ширина по тексту, остаток последней; не влезает - делят пропорционально
+    # недостающему (layout.fit_widths). Горизонтальной прокрутки по-прежнему нет.
+    ON_WIDTH = 48
+    PAD = 24
+
+    def fit_columns(self) -> None:
+        model = self.model()
+        if model is None:
+            return
+        cols = [c for c in range(model.columnCount()) if c != ON_COLUMN]
+        header = self.horizontalHeader()
+        needs = [max(header.sectionSizeHint(c), self.sizeHintForColumn(c)) + self.PAD for c in cols]
+        widths = fit_widths(needs, self.viewport().width() - self.ON_WIDTH)
+        self.setColumnWidth(ON_COLUMN, self.ON_WIDTH)
+        for c, w in zip(cols, widths):
+            self.setColumnWidth(c, w)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.fit_columns()
+
+    def setModel(self, model):
+        super().setModel(model)
+        for sig in (model.modelReset, model.rowsInserted, model.rowsRemoved, model.dataChanged, model.layoutChanged):
+            sig.connect(lambda *_a: QTimer.singleShot(0, self.fit_columns))
+
     def mouseReleaseEvent(self, event):
         row, self._deselect_row = self._deselect_row, None
         if row is not None:
@@ -134,7 +165,7 @@ class BindingsView(QTableView):
         if not index.isValid():
             return
         if index.column() == ON_COLUMN:
-            self.toggle_requested.emit(index.row())  # второй быстрый щелчок — ещё одно переключение
+            self.toggle_requested.emit(index.row())  # второй быстрый щелчок - ещё одно переключение
             return
         self.edit_requested.emit(index.row())
 
@@ -257,8 +288,9 @@ class MainWindow(QMainWindow):
         self.profile_cb.activated.connect(self._select_profile)
         prof.addWidget(self.profile_cb)
         self.profile_btn = QToolButton()
-        self.profile_btn.setText("Действия с профилем")
+        self.profile_btn.setText("Действия с профилем  ▾")
         self.profile_btn.setPopupMode(QToolButton.InstantPopup)
+        self.profile_btn.setStyleSheet(MENU_BUTTON_QSS)
         self.profile_menu = QMenu(self.profile_btn)
         for item in (("Новый пустой профиль…", self._profile_new),
                            ("Новый стандартный (PXN V9: руль как мышь)…", self._profile_new_default),
@@ -285,11 +317,10 @@ class MainWindow(QMainWindow):
         self.model = BindingsModel(self)
         self.table = BindingsView()
         self.table.setModel(self.model)
-        # колонки делят ширину таблицы, как в 2.x: без горизонтальной прокрутки
+        # колонки по содержимому (BindingsView.fit_columns), без горизонтальной прокрутки
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Stretch)
-        header.setSectionResizeMode(ON_COLUMN, QHeaderView.Fixed)
-        self.table.setColumnWidth(ON_COLUMN, 48)
+        header.setSectionResizeMode(QHeaderView.Fixed)
+        header.setStretchLastSection(False)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.table.setTextElideMode(Qt.ElideRight)
         self.table.toggle_requested.connect(self._toggle_binding)
@@ -299,8 +330,9 @@ class MainWindow(QMainWindow):
 
         bar = QHBoxLayout()
         self.add_btn = QToolButton()
-        self.add_btn.setText("＋ Добавить")
+        self.add_btn.setText("＋ Добавить  ▾")
         self.add_btn.setPopupMode(QToolButton.InstantPopup)
+        self.add_btn.setStyleSheet(MENU_BUTTON_QSS)
         self.add_menu = QMenu(self.add_btn)
         for preset in PRESETS:
             if preset is None:
@@ -321,7 +353,7 @@ class MainWindow(QMainWindow):
             bar.addWidget(b)
             self.row_buttons[key] = b
         bar.addStretch(1)
-        hint = QLabel("Подсвечено голубым — то, что сейчас срабатывает")
+        hint = QLabel("Подсвечено голубым - то, что сейчас срабатывает")
         self.hints.append(hint)
         bar.addWidget(hint)
         left_lay.addLayout(bar)
@@ -366,7 +398,7 @@ class MainWindow(QMainWindow):
 
         pad_row = QHBoxLayout()
         self.pad_lbl = QLabel(f"Геймпад: {getattr(self.service, 'pad_status', 'не используется')}")
-        self.hints.append(self.pad_lbl)
+        # состояние геймпада и вибрации - обычным цветом текста, не бледным, как подсказки (проверка 23.10)
         pad_row.addWidget(self.pad_lbl)
         pad_row.addSpacing(18)
         pad_row.addWidget(QLabel("Вибрация из игры на руль:"))
@@ -385,7 +417,6 @@ class MainWindow(QMainWindow):
         self.rumble_test_btn.clicked.connect(self.service.rumble_test)
         pad_row.addWidget(self.rumble_test_btn)
         self.rumble_lbl = QLabel(getattr(self.service, "rumble_status", ""))
-        self.hints.append(self.rumble_lbl)
         pad_row.addWidget(self.rumble_lbl)
         pad_row.addStretch(1)
         root.addLayout(pad_row)
@@ -591,7 +622,7 @@ class MainWindow(QMainWindow):
 
     def _profile_delete(self) -> None:
         if len(self.cfg.profiles) <= 1:
-            dialogs.info(self, "Это единственный профиль — его нельзя удалить.")
+            dialogs.info(self, "Это единственный профиль - его нельзя удалить.")
             return
         old = self.profile.name
         if not dialogs.yes_no(self, f"Удалить профиль «{old}»?"):

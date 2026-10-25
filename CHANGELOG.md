@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The menu buttons "+ Add" and "Profile actions" show their own arrow ▾ next to the text instead of the tiny Fusion indicator under it.
+- Table columns get their width by content: "Name" is no longer cut while "Parameters" has room to spare; when not everything fits, columns shrink in proportion to what they lack, without horizontal scrolling.
+- The gamepad and rumble status at the bottom uses the normal text colour instead of the pale hint colour.
+- Hyphens instead of long dashes in all texts.
+- Tests: 254 (+6): column widths as a property test, menu arrows, status colour, no long dashes.
+
 ## 3.2.0 - 2026-09-26
 
 - The wheel is read without pygame. The input layer talks to SDL through PySDL2, and `SDL2.dll` comes from `pysdl2-dll`, pinned to SDL 2.28.4 - the version pygame 2.6.1 shipped. Device GUIDs, axes, buttons, the hat, hot-plugging, rumble and the virtual gamepad behave exactly as before; existing `config.json` bindings keep working.
@@ -11,7 +19,7 @@
 
 ## 3.2.0 - 2026-09-26
 
-- Руль читается без pygame. Слой ввода работает с SDL через PySDL2, `SDL2.dll` берётся из `pysdl2-dll` и закреплена на SDL 2.28.4 — той же версии, что была у pygame 2.6.1. GUID устройств, оси, кнопки, крестовина, горячее подключение, вибрация и виртуальный геймпад работают как раньше; привязки в `config.json` находят свои устройства.
+- Руль читается без pygame. Слой ввода работает с SDL через PySDL2, `SDL2.dll` берётся из `pysdl2-dll` и закреплена на SDL 2.28.4 - той же версии, что была у pygame 2.6.1. GUID устройств, оси, кнопки, крестовина, горячее подключение, вибрация и виртуальный геймпад работают как раньше; привязки в `config.json` находят свои устройства.
 - `WheelScript.exe --selftest [файл]`: сервис ввода без окна на 2 секунды, в файл пишутся версия SDL, загруженная `SDL2.dll`, устройства и ошибки. Ничего не нажимает, руль не трясёт.
 - В сборку кладётся только `SDL2.dll` (без библиотек картинок, звука и шрифтов, которые тянул pygame); сборка проверяет, что pygame в неё не попал, и прогоняет самопроверку собранного exe. Портативный архив стал меньше на 1,7 МБ.
 - Тестов 248 (+43), среди них слой ввода с подделкой SDL и с настоящей SDL и виртуальным рулём.

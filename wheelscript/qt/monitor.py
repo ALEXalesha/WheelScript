@@ -48,7 +48,7 @@ class MonitorCanvas(QWidget):
         if st is None:
             p.setPen(QColor(P["off"]))
             p.drawText(QRectF(0, 30, w, 60), Qt.AlignHCenter | Qt.AlignTop,
-                       "Руль не найден.\nПодключи его — список обновится сам.")
+                       "Руль не найден.\nПодключи его - список обновится сам.")
             return
         small = QFont(self.font())
         small.setPointSizeF(max(6.0, self.font().pointSizeF() - 2))
@@ -122,7 +122,7 @@ class Monitor(QGroupBox):
         return self._devices[0] if self._devices else None
 
     def update_view(self, states, infos) -> bool:
-        """Обновить вид. True — если что-то поменялось и холст перерисуется."""
+        """Обновить вид. True - если что-то поменялось и холст перерисуется."""
         keys_ = [d.key for d in infos]
         if keys_ != self._devices:
             self._devices = keys_

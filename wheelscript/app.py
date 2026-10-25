@@ -29,7 +29,7 @@ def _setup_logging() -> None:
 
 
 def _single_instance() -> bool:
-    """Два экземпляра слали бы ввод дважды — второй не запускаем."""
+    """Два экземпляра слали бы ввод дважды - второй не запускаем."""
     global _mutex
     if sys.platform != "win32":
         return True
@@ -43,7 +43,7 @@ def _single_instance() -> bool:
 
 UI_FONT_SIZE = 10
 STYLE = "windows11"  # на Windows 10 Qt сам возьмёт windowsvista
-_translators: list = []  # Qt хранит только указатель — держим объект живым
+_translators: list = []  # Qt хранит только указатель - держим объект живым
 
 
 def create_app():
@@ -64,7 +64,7 @@ def create_app():
         app.setWindowIcon(QIcon(str(icon)))
     if not _translators:
         tr = QTranslator(app)
-        # стандартные кнопки («Да», «Отмена») и окна выбора файла — из каталога самого Qt
+        # стандартные кнопки («Да», «Отмена») и окна выбора файла - из каталога самого Qt
         if tr.load(QLocale(QLocale.Russian), "qtbase", "_", QLibraryInfo.path(QLibraryInfo.TranslationsPath)):
             app.installTranslator(tr)
             _translators.append(tr)

@@ -78,7 +78,7 @@ _k("win", 0x5B, 0x5B, True)
 _k("rwin", 0x5C, 0x5C, True)
 _k("apps", 0x5D, 0x5D, True)
 _k("printscreen", 0x2C, 0x37, True)
-# Pause в scan-кодах — многобайтовая последовательность, шлём через VK.
+# Pause в scan-кодах - многобайтовая последовательность, шлём через VK.
 _k("pause", 0x13, 0)
 
 KEY_NAMES: tuple[str, ...] = tuple(_TABLE)
@@ -134,7 +134,7 @@ def from_native(vk: int, scan: int = 0, extended: bool = False) -> Optional[str]
     """Имя клавиши по данным нажатия из Qt: виртуальный код, скан-код, флаг extended.
 
     Для Shift, Ctrl и Alt Windows присылает общий код (0x10/0x11/0x12); правую клавишу
-    отличает скан-код (правый Shift — 0x36) или флаг extended (правые Ctrl и Alt).
+    отличает скан-код (правый Shift - 0x36) или флаг extended (правые Ctrl и Alt).
     """
     if vk in (0x10, 0xA0, 0xA1):
         return "rshift" if vk == 0xA1 or scan == 0x36 else "shift"
@@ -168,4 +168,4 @@ def normalize_combo(names: Iterable[object], limit: int = 4) -> tuple[str, ...]:
 
 def combo_text(names: Iterable[str]) -> str:
     names = tuple(names)
-    return " + ".join(display(n) for n in names) if names else "—"
+    return " + ".join(display(n) for n in names) if names else "-"

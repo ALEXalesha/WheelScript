@@ -130,7 +130,7 @@ class InputService:
                     out += self._drain_commands()
                     rebuild = self._pump()
                     slot = self._pad.slot
-                    if slot != self._own_slot:  # свой геймпад появился или исчез — пересобрать список
+                    if slot != self._own_slot:  # свой геймпад появился или исчез - пересобрать список
                         self._own_slot = slot
                         rebuild = True
                     if rebuild:
