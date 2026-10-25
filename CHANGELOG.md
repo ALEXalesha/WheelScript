@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 3.2.1 - 2026-10-25
 
 - The menu buttons "+ Add" and "Profile actions" show their own arrow ▾ next to the text instead of the tiny Fusion indicator under it.
 - Table columns get their width by content: "Name" is no longer cut while "Parameters" has room to spare; when not everything fits, columns shrink in proportion to what they lack, without horizontal scrolling.
